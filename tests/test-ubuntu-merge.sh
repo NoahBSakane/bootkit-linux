@@ -13,6 +13,8 @@ export LC_ALL=C
 # 1. 合成ツリーを作る(通常ファイル・空 dir・symlink・空白名)。
 mkdir -p src/etc src/usr/share/fonts
 echo hello > src/etc/motd
+# 空白を含む xattr 値 (security.capability の 0x20 バイトの代理)。
+xattr -w user.note 'hello world' src/etc/motd
 printf 'A%.0s' $(seq 1 100) > src/etc/big.bin
 ln -s ../etc/motd src/usr/link1
 ln -s /nonexistent src/usr/dangle
@@ -29,6 +31,16 @@ mkdir -p st2
 unsquashfs -no-xattrs -no-wildcards -f -d st2 o1.squashfs > /dev/null
 python3 -I "$TOOLS/inventory.py" o1.squashfs L1b inv st2
 cmp inv/L1.jsonl inv/L1b.jsonl
+# 空白を含む xattr 値は切れずに棚卸しされること
+# (security.capability 欠けの回帰。設置の rsync -X が EINVAL で失敗する)。
+python3 -I - <<'PYEOF'
+import json
+recs = [json.loads(x) for x in open("inv/L1.jsonl", encoding="utf-8")]
+motd = [r for r in recs if r["p"] == "etc/motd"]
+assert len(motd) == 1, motd
+assert motd[0]["x"].get("user.note") == "hello world", motd[0]["x"]
+print("xattr roundtrip OK")
+PYEOF
 cat > check_pf.py <<'PYEOF'
 import subprocess, sys
 def pfmeta(sqfs):
@@ -138,4 +150,56 @@ assert "sh/sub/deep.txt" not in layers["common.dl.ubuntu"], "shadowed deep file 
 assert "etc/motd" in layers["common.dl.ubuntu"]
 print("plan unit OK")
 PYEOF
+
+# 6. xfix の合成試験: 欠けた xattr 値だけを上書き層で直せること
+# (security.capability 欠けの補正層の手順。空白入り値を mksquashfs の
+# x 行で運び、再棚卸しで公式値と一致すること)。
+python3 -I - <<PYEOF
+import subprocess, sys
+sys.path.insert(0, "$TOOLS")
+from inventory import pf_metadata
+rec, _ = pf_metadata("o1.squashfs")
+want = rec["etc/motd"]["x"]
+assert want.get("user.note") == "hello world", want
+open("fx-want.txt", "w").write(repr(sorted(want.items())))
+print("xfix want OK")
+PYEOF
+# 欠けた版 (旧 inventory の切り詰めを模した層) を作る。
+printf '%s\n' '"etc/motd" M 1000 644 0 0' '"etc/motd" x user.note=hello' > brok.pseudo
+mksquashfs st1 brok.squashfs -comp xz -b 131072 \
+    -force-uid 0 -force-gid 0 -pseudo-override -pf brok.pseudo \
+    -xattrs-exclude '^com\\.apple\\.' -no-progress > /dev/null
+# 補正層: 中身は欠けた層から、xattr は公式値で上書きする。
+mkdir -p fxstage/etc && cp -p st1/etc/motd fxstage/etc/motd
+printf '%s\n' '"etc/motd" M 1000 644 0 0' '"etc/motd" x user.note=hello world' > fx.pseudo
+mksquashfs fxstage fx.squashfs -comp xz -b 131072 \
+    -force-uid 0 -force-gid 0 -pseudo-override -pf fx.pseudo \
+    -xattrs-exclude '^com\\.apple\\.' -no-progress > /dev/null
+python3 -I - <<PYEOF
+import sys
+sys.path.insert(0, "$TOOLS")
+from inventory import pf_metadata
+off, _ = pf_metadata("o1.squashfs")
+fix, _ = pf_metadata("fx.squashfs")
+assert fix["etc/motd"]["x"] == off["etc/motd"]["x"], (fix["etc/motd"], off["etc/motd"])
+print("xfix overlay OK")
+PYEOF
+cmp fxstage/etc/motd st1/etc/motd
+
+# 7. 設置先の検証道具の起動面: QEMU なしで --help と引数検査だけ行う。
+OFFLINE=$HERE/tools/offline-install
+python3 "$OFFLINE/verify-installed.py" --help > help1.txt
+grep -q -- --kernel help1.txt
+grep -q -- --initrd help1.txt
+grep -q -- --append help1.txt
+python3 "$OFFLINE/verify-installed-extra.py" --help > help2.txt
+grep -q -- --kernel help2.txt
+# --kernel だけでは不足 (--initrd と --append が要る)。
+touch fakedisk.qcow2
+if python3 "$OFFLINE/verify-installed.py" --disk fakedisk.qcow2 \
+    --prefix prefix-nope --kernel /tmp/none 2>err.txt; then
+    echo "verify-installed.py must reject --kernel without --initrd" >&2
+    exit 1
+fi
+echo "verify CLI OK"
 echo "PASS: ubuntu-merge synthetic roundtrip"

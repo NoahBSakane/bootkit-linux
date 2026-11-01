@@ -1,0 +1,27 @@
+kernel:
+  default: linux-generic
+sources:
+- id: ubuntu-server
+  default: true
+  description:
+    en: The default install contains a curated set of packages that provide a comfortable
+      experience for operating your server.
+  name:
+    en: Ubuntu Server
+  path: common.server.xfix.squashfs
+  size: 1515610112
+  type: fsimage-layered
+  variant: server
+  locale_support: locale-only
+- id: ubuntu-desktop
+  default: false
+  description:
+    en: A full featured Ubuntu Desktop.
+  name:
+    en: Ubuntu Desktop
+  path: common.dl.ubuntu.squashfs
+  size: 4722253824
+  type: fsimage-layered
+  variant: desktop
+  locale_support: langpack
+version: 2

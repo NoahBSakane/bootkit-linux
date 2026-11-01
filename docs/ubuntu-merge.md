@@ -264,31 +264,182 @@ OS インストールや enhanced-secureboot の選択は検証対象外であ�
 
 ## OS インストールの検証 (オフライン)
 
-2026-10-31、統合 ISO (SHA-256
-`761b156da9d45fd9b666d6a6cb42dd4fd1e961063c8a7bfeab6937ba560a7d04`)
-からの Server の offline 自動インストールを QEMU x86_64 / TCG / OVMF で
-試行した (`-net none`)。証拠は `build/evidence/offline-install/server/`。
-Lubuntu と Ubuntu のインストールは未実施である。
+### 目的と結果の要約
 
-- seed は `CIDATA` ラベルの小さな ISO (`user-data` / `meta-data`)。
-  GRUB の Server 通常項目に
-  `bootkit_extra='autoinstall ds=nocloud ...'` を渡した。
-  カーネル行・GRUB の 9 項目は画像と serial に記録した。
-- seed を認識し、全 controller の `apply_autoinstall_config` が完了した。
-  しかし `subiquity/Install/install/configure_apt` で overlay の mount
-  (`lowerdir=/media/filesystem`) が終了状態 32 で失敗し、`install_fail`
-  の crash を書いて停止した。標的ディスク (qcow2 20GB スパース) への
-  書込みはなく、単独起動・`dpkg --audit`・`apt-get check` には至らない。
-- 原因: subiquity (同梱 snap 7403) は起動時に
-  `/cdrom/casper/install-sources.yaml` を探し、無ければ組込みの legacy
-  項目 (`path=/media/filesystem`、`type=cp`) へ落ちる。統合 ISO の
-  `/casper/` に同ファイルは無い (公式 Server 用は `bootkit-meta` に
-  保存のみ)。live 内に `/media/filesystem` は無く、casper は層を
-  `/rofs` に載せる。根拠は ISO からの層・snap の読み取りと、
-  先行の live 起動の mount 記録である。
-- 方向: `fsimage-layered` の層の導出はドットで短くする規則で、
-  `common.server.squashfs` なら `common.squashfs` との連鎖になる
-  (同梱 curtin の `_get_image_stack` で確認)。再層化に合わせた
-  カタログを `/casper/install-sources.yaml` に置けば Server の
-  自動インストールが進む見込みだが、ISO の再組立と再検証が必要で、
-  今回は未実施である。
+Server は、統合 ISO からネットワークなしで設置し、素の単独起動で serial と
+VGA (tty1) の両方に `login:` が出て `ubuntu` で入れる。`dpkg --audit` は sudo
+あり・なしとも無出力・終了 0、`apt-get check` は終了 0、GUI
+(`ubuntu-desktop`・`gdm3`・`gnome-shell`) は不在、`getcap /usr/bin/ping` と
+`/usr/bin/mtr-packet` はともに `cap_net_raw=ep` である。確認日は 2026-11-02、
+QEMU x86_64 / TCG / OVMF、RAM 2,048MiB、複製 ISO の SHA-256 は
+`cdad754da04ea793b1330de4ca22ef7520acb3d03ccf2fd679050a0917b56293`、
+seed (`seed11.iso`) の SHA-256 は
+`7017278b681cc6ca319dcfa85b7634fb722cc3ac6fd5fcbcc665a8fc16491221` である。
+証拠は `build/evidence/install-sources/xfix/server-xfix11*` である。Ubuntu
+desktop・Lubuntu の設置は未検証である。
+
+### 設置の仕組み
+
+ISO への追記は次の 3 点である。いずれも既存 ISO の複製への差分追記だけで、
+層・pool の再生成や ISO 全体の作り直しはしない。入力 ISO 自体には書かない。
+
+- `/casper/install-sources.yaml` (方式 (a): 1 つのカタログに複数 OS の項目を
+  ID つきで入れる。Server は `source: {id: ubuntu-server}` で選ぶ)。
+  原文は `tools/offline-install/install-sources.yaml` である。subiquity は
+  起動時に同パスを探し、無ければ組込みの legacy 項目
+  (`path=/media/filesystem`、`type=cp`) へ落ちて設置が失敗するため、
+  再層化に合わせたカタログを置く。
+- 公式 Server ISO の `/dists` (署名つき原本)。live の cdrom.sources が
+  `file:///cdrom` の pool を指すため、これが無いと標的内の `apt-get update`
+  が終了 100 で失敗する。
+- xattr 補正層 3 個 (次項)。
+
+道具と再現の手順は次のとおり。各追記の直後に `fix-pvd.py` で PVD 補正し、
+roundtrip を照合する。
+
+- `sh tools/ubuntu-merge/add-xfix-layers.sh <複製ISO>`:
+  補正層 3 個を 1 回の xorriso 起動でまとめて写す。追記と補正を分けると
+  primary PVD の volume size の巻戻りで次の xorriso が像を読めなくなる。
+- `sh tools/ubuntu-merge/add-install-sources.sh <複製ISO> [カタログ]`:
+  カタログを `/casper/install-sources.yaml` へ写す。
+- `sh tools/ubuntu-merge/add-server-dists.sh <複製ISO> <公式ServerISO>`:
+  公式 Server ISO の `/dists` を抜粋して写す。
+- `python3 -I tools/ubuntu-merge/xfix-build.py`・`xfix-verify.py`・
+  `xfix-audit.py`: 補正層の構築・検証・不一致の全数調査。
+- `sh tools/offline-install/make-xfix-seed.sh <user-data> <meta-data>
+  <out-seed.iso> [extra-file]`: seed (CIDATA) の ISO 化。
+  user-data の原文が正本で、この道具は ISO 化だけを行う。
+- `python3 tools/offline-install/server-autoinstall.py --iso <複製ISO>
+  --seed <seed.iso> --disk <空qcow2> --prefix <接頭辞>`:
+  QEMU x86_64 / TCG / OVMF、`-net none`、RAM 2,048MiB (既定)、
+  空 qcow2 20GB で自動設置する。
+
+カタログの `size` は層の連鎖の合計である (Server は 1,297,666,048 +
+217,894,912 + 49,152 = 1,515,610,112)。再現の記録は
+`build/evidence/install-sources/xfix/rebuild11-*.log`、
+最終 SHA-256 は同 `rebuild11-final.sha256` である。
+
+### xattr 補正層
+
+原因は `tools/ubuntu-merge/inventory.py` の xattr 値の空白割りで、
+`security.capability` が 5 バイトに欠けたことである。設置の
+`stage-extract` の `rsync -aXHAS` がこの読み取りで EINVAL となり失敗する。
+欠けの修正と回帰試験は `tests/test-ubuntu-merge.sh` にある。
+
+不一致の全数 (`tools/ubuntu-merge/xfix-audit.py` で公式 10 層と統合 5 層を
+棚卸しし、OS ごとに可視ビューで突き合わせ。証拠は
+`build/evidence/install-sources/xfix/mismatch.json`):
+
+- `security.capability`: 2 パス (`usr/bin/ping`・`usr/bin/mtr-packet`。
+  公式 20 バイトに対し統合 5 バイト)。3 OS の連鎖すべて
+  `common.squashfs` にある。
+- `trusted.overlay.origin`: 54 ディレクトリ
+  (統合側の再構成時の付帯値)。
+- `trusted.overlay.impure` と通常 xattr の不一致は無い。
+
+設置を壊すのは能力値だけである。curtin は層を loop で載せて overlay で
+重ね、`rsync -aXHAS` で標的へ写す。overlay 越しの読み取りでは
+`trusted.overlay.*` は核が横取りして写らないため、通常 xattr の能力値だけが
+通る。
+
+補正層は OS ごとの leaf の子で、casper のドット規則で親の連鎖を導出する
+(例: `common.server.xfix.squashfs` → `common.server` → `common`)。
+中身・モード・所有者・時刻は統合層の版のまま、xattr だけ公式の可視値で
+置く。共通層 (`common.squashfs`) にある不一致は各 OS の補正層に複製して
+入れる。検証は `tools/ubuntu-merge/xfix-verify.py` で連鎖 + xfix の可視
+xattr と公式の全件一致、中身は `cmp` で公式・統合と一致である。
+
+| 補正層 | 直すパス数 | 大きさ (バイト) |
+| --- | --- | --- |
+| `common.server.xfix.squashfs` | 21 (通常ファイル 2 + dir 19) | 49,152 |
+| `common.dl.ubuntu.xfix.squashfs` | 28 (通常ファイル 2 + dir 26) | 49,152 |
+| `common.dl.lubuntu.xfix.squashfs` | 11 (通常ファイル 2 + dir 9) | 49,152 |
+
+起動項目には反映しない。`layerfs-path` と `bootkit-chains` は変えず、
+起動は従来のままにする。補正は設置の連鎖だけに効く。
+カタログの Server 項目の `path` だけを `common.server.xfix.squashfs` にする。
+
+### 設置先の後処理(暫定策)
+
+OS ごとの leaf 層が installer・live 層の内容を含むため、設置先に混ざる。
+casper が initrd に入ると live の媒体を探して止まり、subiquity の自動起動と
+serial-getty の drop-in が `login:` を塞ぐ。根本の解決は、設置元の層から
+installer・live 由来を分ける再層化である。seed の late-commands による
+後処理は OS ごとの保守が要る暫定策である。
+
+seed の late-commands (確定形。原文は
+`tools/offline-install/server-xfix-user-data.yaml` と
+`server-xfix-meta-data.yaml`。各々に `echo CMDn_RC=$R` の終了記録付き) は
+次の 9 件である。
+
+- CMD0: casper の purge (`/target` へ proc/sys/dev を載せて
+  `chroot /target apt-get purge -y casper`)。
+- CMD1: initramfs の casper conf 2 件の削除。
+- CMD2: installer 層だけの一覧 (`installer-only-paths11.txt`。3,554 件。
+  `/var/lib/dpkg/info/` は除外) の `/target` からの一括除去。seed ISO 内の
+  別ファイルとして同梱し、CIDATA ラベルで mount して読む。
+- CMD3: `update-initramfs -u -k all` での initrd の再生成。
+- CMD4: 再生成した initrd に casper が無いことの確認。
+- CMD5: 一覧の残存数の報告 (報告のみ)。
+- CMD6: subiquity 由来 3 単位の直接 mask (`/dev/null` への symlink)。
+- CMD7: `multi-user.target.wants` 側の subiquity の symlink 除去。
+- CMD8: mask と wants の検証。
+
+一覧の作り方は `tools/ubuntu-merge/installer-only-paths.py` である。公式
+Server ISO の installer 2 層にだけ在る全パスを列挙する (下 2 層に在るパスと
+上書き分は除く)。原文は
+`build/evidence/install-sources/xfix/installer-only-paths11.txt` である。
+`/var/lib/dpkg/info/` 以下の 75 件は一覧から除く (除かないと標的の台帳が
+消え、`dpkg --audit` が installer 由来 14 包の `.list`・`.md5sums` 欠落を
+報告する)。除いた一覧は 3,554 件である。seed の late-commands の組み立ては
+`tools/offline-install/make-bulk-user-data.py` である。
+
+採らなかった方式: `systemctl mask` は設置環境の chroot では使えず
+(終了 1 で無変更のため)、unit 本体を `/dev/null` への symlink で直接 mask
+する。該当 14 包の purge は `initramfs-tools` (起動に要る) 等を削るため
+採らない。
+
+残る差: 公式の 2 設置層との manifest 突き合わせ
+(`build/evidence/install-sources/xfix/target11-manifest-diff.txt`) では、
+共通 708 包・版差 0・標的側のみ 20 件 (UEFI 向け 6 件 + installer 由来 14
+件) である。ファイルでは `/etc/cloud` が残り (16,713 バイト・16 件。
+設置器用設定なし)、`/etc/default/grub` の live 由来 cmdline が残る
+(`autoinstall ds=nocloud` 付き。核は無視するため起動への害なし)。
+subiquity の snap 本体は一括除去で消え、`/var/lib/snapd/snaps` には
+core24・hwctl・snapd の 3 件のみ残る。標的の事後調査は
+`tools/offline-install/target-ls.py` で qcow2→raw 化して読み取り専用で読む
+(`target11-survey.txt`)。
+
+### 既知の制約と未検証
+
+- 対話インストールの選択画面に他 OS の項目が出る (未検証)。
+- Ubuntu desktop 用の dists は Release が衝突するため未対応である。
+- Minimal 構成 (`unpack_regular` 偽) は未検証である。
+- sudo なしの `dpkg --audit` は、一覧に `/var/lib/dpkg/info/` を含めた構成で
+  は終了 2、除いた構成では無出力・終了 0 だった。除いた構成の実測は 1 回
+  だけで、sudo なしの終了 2 の原因(権限か台帳か)は未特定である。
+- `verify-installed-extra.py` の `dpkg-l` (全文 `dpkg -l`) は巨大出力で
+  完了行が取れず exit 1 になる (検査器側の欠陥。要約の `TOTAL=726` は
+  取れた)。
+- Ubuntu desktop・Lubuntu の設置は未検証である。
+
+### 検証の道具
+
+`tools/offline-install/` の各道具の説明は次のとおり。証拠の置き場は
+`build/evidence/install-sources/` である (seed 等の ISO は `*.iso` で git の
+対象外。現行では `build/` 全体が未追跡)。
+
+- `server-autoinstall.py`: 統合 ISO から Server を autoinstall で標的
+  ディスクへ入れる (第 1 起動)。
+- `server-inspect.py`: 統合 ISO の Server live を起動し、ファイル経由で
+  操作・調査する。
+- `server-shell.py`: 統合 ISO の Server live を debug shell で起動し、
+  操作・調査する。
+- `verify-installed.py`: 標的ディスク単独で起動し、設置結果を検証する
+  (第 2 起動)。`--kernel`・`--initrd`・`--append` で直接核起動もできる。
+- `verify-installed-extra.py`: 標的ディスク単独で起動し、xfix 由来の
+  追加検査を行う (第 2 起動の続き)。
+- `target-ls.py`: qcow2/raw 内の ext4 を読み取り専用で読む
+  (sudo・macFUSE 不要)。
+- `make-server-seed.sh`・`make-xfix-seed.sh`・`make-bulk-user-data.py`:
+  seed と user-data の生成。

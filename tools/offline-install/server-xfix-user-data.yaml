@@ -1,0 +1,30 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US
+  keyboard: {layout: us}
+  identity: {hostname: ubuntu-server, username: ubuntu, password: '$6$abcd1234$3VkCBTg3.kJfjQlZtE6c.gM8RuE1btCYFy9NBcRKfJzZFcwMykT.KWwtTO3QbMMS8kdR9VKXJH0kj8jsRvmR/1'}
+  ssh: {install-server: false, allow-pw: true}
+  storage: {layout: {name: direct}}
+  network: {network: {version: 2}}
+  apt: {preserve_sources_list: false}
+  updates: security
+  packages: []
+  snaps: []
+  refresh-installer: {update: no}
+  # 方式(a): /casper/install-sources.yaml 内の Server 項目を ID で選ぶ。
+  source: {id: ubuntu-server}
+  shutdown: poweroff
+  # 補正層の検証用: live 由来の casper を標的から除き initrd を作り直す。
+  # (標的の initrd に casper の live 起動 logic が入り単独起動できない。
+  # late-commands は設置環境で走るため /target へ入り chroot で行う)
+  late-commands:
+    - sh -c 'mount -t proc proc /target/proc && mount --bind /sys /target/sys && mount --bind /dev /target/dev && chroot /target apt-get purge -y casper; R=$?; echo CMD0_RC=$R; umount -l /target/sys; umount -l /target/dev; umount -l /target/proc; exit $R'
+    - sh -c 'rm -f /target/etc/initramfs-tools/conf.d/casperize.conf /target/etc/initramfs-tools/conf.d/default-layer.conf; R=$?; echo CMD1_RC=$R; exit $R'
+    - sh -c 'dev=$(blkid -L CIDATA | head -n 1); [ -n "$dev" ] || { echo SEED_NOT_FOUND; exit 11; }; mkdir -p /mnt/seedlist; mountpoint -q /mnt/seedlist || mount -o ro "$dev" /mnt/seedlist || { echo SEED_MOUNT_FAIL; exit 12; }; L=/mnt/seedlist/installer-only-paths11.txt; [ -f "$L" ] || { echo LIST_MISSING; exit 13; }; n=0; while IFS= read -r p; do case "$p" in ""|\#*) continue;; esac; t="/target$p"; case "$t" in /target/|/target) echo EMPTY_PATH_SKIP; exit 14;; esac; case "$t" in /target/*) ;; *) echo BAD_PATH_SKIP; exit 15;; esac; rm -rf "$t" || { echo "RM_FAIL $t"; exit 16; }; n=$((n+1)); done <"$L"; R=$?; echo CMD2_PURGE_N=$n CMD2_PURGE_RC=$R; exit $R'
+    - sh -c 'mount -t proc proc /target/proc && mount --bind /sys /target/sys && mount --bind /dev /target/dev && chroot /target update-initramfs -u -k all; R=$?; echo CMD3_RC=$R; umount -l /target/sys; umount -l /target/dev; umount -l /target/proc; exit $R'
+    - sh -c 'chroot /target lsinitramfs /boot/initrd.img-7.0.0-30-generic | grep casper || echo NOCASPER_IN_INITRD; echo CMD4_RC=$?'
+    - sh -c 'mountpoint -q /mnt/seedlist || { dev=$(blkid -L CIDATA | head -n 1); [ -n "$dev" ] || { echo SEED_NOT_FOUND; exit 21; }; mkdir -p /mnt/seedlist; mount -o ro "$dev" /mnt/seedlist || { echo SEED_MOUNT_FAIL; exit 22; }; }; L=/mnt/seedlist/installer-only-paths11.txt; [ -f "$L" ] || { echo LIST_MISSING; exit 23; }; rem=0; remnames=""; while IFS= read -r p; do case "$p" in ""|\#*) continue;; esac; if [ -e "/target$p" ] || [ -L "/target$p" ]; then rem=$((rem+1)); case "$rem" in [1-9]|1?) remnames="$remnames /target$p";; esac; fi; done <"$L"; echo CMD5_REMAIN=$rem$remnames; echo CMD5_RC=0'
+    - sh -c 'ln -sf /dev/null /target/etc/systemd/system/snap.subiquity.subiquity-server.service && ln -sf /dev/null /target/etc/systemd/system/snap.subiquity.subiquity-service.service && ln -sf /dev/null /target/etc/systemd/system/snap-subiquity-7403.mount; R=$?; echo CMD6_MASK_RC=$R; exit $R'
+    - sh -c 'rm -f /target/etc/systemd/system/multi-user.target.wants/snap.subiquity.subiquity-server.service /target/etc/systemd/system/multi-user.target.wants/snap.subiquity.subiquity-service.service /target/etc/systemd/system/multi-user.target.wants/snap-subiquity-7403.mount; R=$?; echo CMD7_WANTS_RC=$R; exit $R'
+    - sh -c 'ls -la /target/etc/systemd/system/snap.subiquity.subiquity-server.service /target/etc/systemd/system/snap.subiquity.subiquity-service.service /target/etc/systemd/system/snap-subiquity-7403.mount; R=$?; echo CMD8_VERIFY_RC=$R; ls /target/etc/systemd/system/multi-user.target.wants/ | grep -i subiquity; echo WANTS_GREP_RC=$?; exit $R'

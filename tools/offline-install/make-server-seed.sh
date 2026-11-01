@@ -24,6 +24,8 @@ autoinstall:
   packages: []
   snaps: []
   refresh-installer: {update: no}
+  # 方式(a): /casper/install-sources.yaml 内の Server 項目を ID で選ぶ。
+  source: {id: ubuntu-server}
   shutdown: poweroff
 EOF
 printf 'instance-id: offline-server-01\nlocal-hostname: ubuntu-server\n' >"$DIR/meta-data"

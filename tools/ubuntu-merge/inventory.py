@@ -144,7 +144,11 @@ def pf_metadata(sqfs):
             rec.setdefault(path, {}).update(
                 {"linkto": unescape_pf(" ".join(parts[0:]))})
         elif kind == "x":
-            name, _, val = parts[0].partition("=")
+            # 値は空白(能力値などの 0x20 バイト)を含むため、空白で割らず
+            # 行の残り全体から名の後ろを取る。parts[0] だけでは
+            # security.capability が途中で切れて設置の rsync -X が
+            # EINVAL で失敗する (build/evidence/install-sources 参照)。
+            name, _, val = rest.partition("=")
             rec.setdefault(path, {}).setdefault("x", {})[name] = val
     return rec, meta
 

@@ -1,3 +1,5 @@
+# 作業用の複製・証拠 (9GB 級の ISO 複製を誤って収録しない)
+/build/
 # live-build の生成物
 /binary/
 /chroot/

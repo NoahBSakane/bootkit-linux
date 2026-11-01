@@ -26,6 +26,9 @@ def parse_args():
     parser.add_argument('--timeout', type=float, default=1800)
     parser.add_argument('--user', default='ubuntu')
     parser.add_argument('--password', default='ubuntu')
+    parser.add_argument('--kernel', type=Path, default=None)
+    parser.add_argument('--initrd', type=Path, default=None)
+    parser.add_argument('--append', default=None)
     args = parser.parse_args()
     if not args.disk.is_file():
         parser.error(f'ディスクがありません: {args.disk}')
@@ -84,18 +87,28 @@ def main():
     serial_conn = None
     serial_file = None
     try:
-        subprocess.run(['cp', str(vars_template), str(variables)], check=True)
         command = ['qemu-system-x86_64', '-machine', 'q35',
                    '-accel', 'tcg,thread=multi', '-cpu', 'Westmere,-aes',
-                   '-smp', str(args.smp), '-m', str(args.mem),
-                   '-drive', f'if=pflash,format=raw,readonly=on,file={code}',
-                   '-drive', f'if=pflash,format=raw,file={variables}',
-                   '-drive', f'file={args.disk},if=virtio,format=qcow2',
-                   '-vga', 'std', '-usb', '-device', 'usb-kbd',
-                   '-boot', 'c', '-display', 'none',
-                   '-monitor', f'unix:{monitor_path},server=on,wait=off',
-                   '-serial', f'unix:{serial_path},server=on,wait=off',
-                   '-net', 'none']
+                   '-smp', str(args.smp), '-m', str(args.mem)]
+        if args.kernel is not None:
+            # 直接核起動 (grub を経由せず cmdline を付ける。設置先の
+            # 自動起動物の抑止に使う)。
+            if args.initrd is None or args.append is None:
+                raise ValueError('--kernel には --initrd と --append が要る')
+            command += ['-kernel', str(args.kernel),
+                        '-initrd', str(args.initrd),
+                        '-append', args.append]
+        else:
+            subprocess.run(['cp', str(vars_template), str(variables)], check=True)
+            command += ['-drive', f'if=pflash,format=raw,readonly=on,file={code}',
+                        '-drive', f'if=pflash,format=raw,file={variables}',
+                        '-boot', 'c']
+        command += ['-drive', f'file={args.disk},if=virtio,format=qcow2',
+                    '-vga', 'std', '-usb', '-device', 'usb-kbd',
+                    '-display', 'none',
+                    '-monitor', f'unix:{monitor_path},server=on,wait=off',
+                    '-serial', f'unix:{serial_path},server=on,wait=off',
+                    '-net', 'none']
         note('[qemu] ' + shlex.join(command))
         print(shlex.join(command), flush=True)
         log = open(log_path, 'wb')
@@ -180,16 +193,19 @@ def main():
             note('[serial] パスワード不要で進行')
         prompt = expect_prompt(expect, ['$ ', '# '], 60, 'プロンプト待ち')
         out = {}
-        out['audit'] = run('echo AUDIT_BEGIN; dpkg --audit; echo "AUDIT_RC=$?"; echo AUDIT_DONE', 'AUDIT_DONE', 300, 'dpkg audit')
+        out['audit'] = run(f'echo AUDIT_BEGIN; echo {args.password} | sudo -S dpkg --audit; echo "AUDIT_RC=$?"; echo AUDIT_DONE', 'AUDIT_DONE', 300, 'dpkg audit')
         out['apt'] = run(f'echo APT_BEGIN; echo {args.password} | sudo -S apt-get check; echo "APT_RC=$?"; echo APT_DONE', 'APT_DONE', 300, 'apt check')
         out['pkgsum'] = run('echo PKG_BEGIN; dpkg -l | awk \'{print $1}\' | sort | uniq -c; echo "TOTAL=$(dpkg -l | grep -c ^ii)"; echo PKG_DONE', 'PKG_DONE', 300, 'dpkg 要約')
         out['gui'] = run('echo GUI_BEGIN; dpkg -l ubuntu-desktop gdm3 gnome-shell calamares 2>&1 | tail -8; echo GUI_DONE', 'GUI_DONE', 300, 'GUI混入確認')
+        out['getcap'] = run('echo GETCAP_BEGIN; getcap /usr/bin/ping /usr/bin/mtr-packet; echo GETCAP_DONE', 'GETCAP_DONE', 300, 'getcap確認')
         (prefix.parent / (prefix.name + '.checks.txt')).write_text(
             '\n\n'.join(f'=== {key} ===\n{value}' for key, value in out.items()), encoding='utf-8')
         if not re.search(r'(?m)^AUDIT_RC=0$', out['audit']):
             raise RuntimeError('dpkg --audit が無出力・終了 0 でない')
         if not re.search(r'(?m)^APT_RC=0$', out['apt']):
             raise RuntimeError('apt-get check が終了 0 でない')
+        if out['getcap'].count('cap_net_raw=ep') < 2:
+            raise RuntimeError('getcap が cap_net_raw=ep でない')
         note('[判定] 第2起動の検査が成功')
         monitor_conn.sendall(b'quit\n')
         try:

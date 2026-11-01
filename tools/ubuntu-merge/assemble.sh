@@ -134,3 +134,11 @@ xorriso -as mkisofs \
     "$ROOT" >> "$LOG" 2>&1
 log "iso done: $(wc -c < "$OUT") bytes"
 du -sh "$ROOT/casper" >> "$LOG"
+# Lubuntu の設置用上書き層は既定では追記しない。BOOTKIT_LUBUNTU_INSTALL=1 の
+# ときだけ、Lubuntu 公式 ISO の pool を元に統合層を追記する。
+if [ "${BOOTKIT_LUBUNTU_INSTALL:-0}" = 1 ]; then
+    log "append lubuntu install layer"
+    sh "$HERE/tools/ubuntu-merge/add-lubuntu-install-layer.sh" \
+        "$SRC/lubuntu-26.04.1-desktop-amd64.iso" "$OUT" >> "$LOG" 2>&1
+    log "install layer appended: $(wc -c < "$OUT") bytes"
+fi

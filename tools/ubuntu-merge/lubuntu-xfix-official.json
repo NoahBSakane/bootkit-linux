@@ -1,0 +1,73 @@
+{
+ "paths": {
+  "usr/bin/mtr-packet": {
+   "int_layer": "common.squashfs",
+   "x": {
+    "security.capability": "0t\\001\\000\\000\\002\\000 \\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000"
+   }
+  },
+  "usr/bin/ping": {
+   "int_layer": "common.squashfs",
+   "x": {
+    "security.capability": "0t\\001\\000\\000\\002\\000 \\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000"
+   }
+  },
+  "usr/share/apport/package-hooks": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h\\210\\202\\030\\000\\210\\251\\343 "
+   }
+  },
+  "usr/share/bash-completion/completions": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h\\344c\\030\\000n0\\266 "
+   }
+  },
+  "usr/share/initramfs-tools/scripts": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.impure": "y",
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h<\\017\\015\\000\\333$ \\233"
+   }
+  },
+  "usr/share/locale/bg/LC_MESSAGES": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h\\002\\205\\030\\000C8 \\370"
+   }
+  },
+  "usr/share/locale/cy/LC_MESSAGES": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h]\\370\\014\\000)| \\237"
+   }
+  },
+  "usr/share/locale/es/LC_MESSAGES": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h \\205\\030\\000\\014\\010y\\246"
+   }
+  },
+  "usr/share/locale/nn/LC_MESSAGES": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h \\366\\014\\000\\354\\022\\214\\311"
+   }
+  },
+  "usr/share/locale/te": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.impure": "y",
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h\\313\\372\\014\\000\\320E  "
+   }
+  },
+  "usr/share/locale/uz@cyrillic": {
+   "int_layer": "common.dl.lubuntu.squashfs",
+   "x": {
+    "trusted.overlay.impure": "y",
+    "trusted.overlay.origin": "0t\\000\\373\\035\\000\\001\\2222z\\232\\332\\277M(\\2438\\274\\226\\262h\\360h')\\020\\000\\330 \\372J"
+   }
+  }
+ }
+}

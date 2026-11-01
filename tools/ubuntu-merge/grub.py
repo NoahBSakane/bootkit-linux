@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """統合 ISO の 3 OS × 3 項目を生成する (通常・safe graphics・toram)。"""
+import os
 import sys
+
+
+# Lubuntu の leaf は既定で土台層に戻す。統合層を追記した ISO だけ、
+# 追記スクリプトが BOOTKIT_LUBUNTU_LEAF で統合層の leaf を渡す。
+# assemble.sh が素で組む ISO は従来どおり起動できる。
+LUBUNTU_LEAF = os.environ.get('BOOTKIT_LUBUNTU_LEAF',
+                              'common.dl.lubuntu.squashfs')
 
 
 def config():
@@ -9,7 +17,7 @@ def config():
              'set menu_color_highlight=black/light-gray']
     for osname, title, leaf in (
         ('ubuntu', 'Ubuntu', 'common.dl.ubuntu.squashfs'),
-        ('lubuntu', 'Lubuntu', 'common.dl.lubuntu.squashfs'),
+        ('lubuntu', 'Lubuntu', LUBUNTU_LEAF),
         ('server', 'Ubuntu Server', 'common.server.squashfs'),
     ):
         for suffix, extra in (('', ''), (' (safe graphics)', ' nomodeset'),

@@ -18,9 +18,11 @@ casper の `layerfs-path` の規則に従う。
 | `common.dl.ubuntu.squashfs` | Ubuntu の残り(固有 + desktop-Server 共通の複製) | Ubuntu | 2,952,462,336 |
 | `common.dl.lubuntu.squashfs` | Lubuntu の残り(固有 + Lubuntu-Server 共通の複製) | Lubuntu | 1,980,141,568 |
 | `common.server.squashfs` | Server の残り(固有 + 両共通の複製) | Server | 217,894,912 |
+| `common.dl.lubuntu.install.squashfs` | Lubuntu の設置用上書き層。`unpackfs.conf`・白抜きの蘇生・xattr 補正・bootloader 用の小さな署名なし repo・context 修正を 1 層に統合した物。ISO の追記で足すもので、層の再生成の対象外 | Lubuntu | 7,507,968 |
 
-5 層の合計は 6,920,290,304 バイト(6.45GiB)。本物の主要 10 層の合計
-10,088,198,336 バイト(9.40GiB)に対して 3.17GB の削減である。
+土台 5 層の合計は 6,920,290,304 バイト(6.45GiB)。本物の主要 10 層の
+合計 10,088,198,336 バイト(9.40GiB)に対して 3.17GB の削減である。
+Lubuntu の追記 1 層は 7,507,968 バイトである。
 
 起動の連鎖(`casper/bootkit-chains/<os>.list`。親から子の順。T2 との
 インターフェースで変えない):
@@ -28,7 +30,12 @@ casper の `layerfs-path` の規則に従う。
 - Ubuntu (`bootkit.os=ubuntu`): `common.squashfs`、`common.dl.squashfs`、
   `common.dl.ubuntu.squashfs`。`layerfs-path=common.dl.ubuntu.squashfs`
 - Lubuntu (`bootkit.os=lubuntu`): `common.squashfs`、
-  `common.dl.squashfs`、`common.dl.lubuntu.squashfs`
+  `common.dl.squashfs`、`common.dl.lubuntu.squashfs`。
+  設置用の追記をした ISO では末尾に `common.dl.lubuntu.install.squashfs`
+  が付いた 4 層になり、`layerfs-path` はその leaf を指す。
+  追記前の ISO の起動項目は土台の leaf のままで起動できる
+  (`tools/ubuntu-merge/grub.py` の既定。追記スクリプトだけが
+  `BOOTKIT_LUBUNTU_LEAF` で統合層の leaf を渡す)
 - Server (`bootkit.os=server`): `common.squashfs`、`common.server.squashfs`
 
 範囲の定義:各 OS の「全層」は次の主要層だけを指す。desktop の言語・
@@ -42,8 +49,11 @@ secureboot 派生層(`minimal.de` など 38 層)は対象外で、統合 ISO に
   ← `.installer.generic`
 
 重ねの意味は overlayfs と同じで、上層の非ディレクトリは同パスと
-下層サブツリーを隠す。whiteout は使わない(各 OS の各パスは連鎖中の
-ちょうど 1 層に入る)。
+下層サブツリーを隠す。土台 5 層の連鎖中では各 OS の各パスはちょうど
+1 層に入り、whiteout は使わない。ただし公式の live 層由来の whiteout
+(char/block 0,0)が leaf 層に残る (Lubuntu 86・Ubuntu 81。`unsquashfs -ll`
+の種別数えで実測)。いずれも overlay の表示では消えた形になり、起動の
+見た目には出ない。設置への影響は「OS インストールの検証」で述べる。
 
 共有できない重複の扱い:desktop と Server だけに共通のファイル
 (非圧縮 24MB、約 8MB 相当)と Lubuntu と Server だけに共通のファイル
@@ -276,7 +286,7 @@ QEMU x86_64 / TCG / OVMF、RAM 2,048MiB、複製 ISO の SHA-256 は
 seed (`seed11.iso`) の SHA-256 は
 `7017278b681cc6ca319dcfa85b7634fb722cc3ac6fd5fcbcc665a8fc16491221` である。
 証拠は `build/evidence/install-sources/xfix/server-xfix11*` である。Ubuntu
-desktop・Lubuntu の設置は未検証である。
+desktop の設置は未検証である。Lubuntu の設置は次節で述べる。
 
 ### 設置の仕組み
 
@@ -421,7 +431,7 @@ core24・hwctl・snapd の 3 件のみ残る。標的の事後調査は
 - `verify-installed-extra.py` の `dpkg-l` (全文 `dpkg -l`) は巨大出力で
   完了行が取れず exit 1 になる (検査器側の欠陥。要約の `TOTAL=726` は
   取れた)。
-- Ubuntu desktop・Lubuntu の設置は未検証である。
+- Ubuntu desktop の設置は未検証である。
 
 ### 検証の道具
 
@@ -443,3 +453,183 @@ core24・hwctl・snapd の 3 件のみ残る。標的の事後調査は
   (sudo・macFUSE 不要)。
 - `make-server-seed.sh`・`make-xfix-seed.sh`・`make-bulk-user-data.py`:
   seed と user-data の生成。
+
+### Lubuntu の設置 (Calamares、オフライン)
+
+#### 結果の要約
+
+統合層での設置は 2026-11-02 に完走し、再起動後の検証まで通った。
+入力 ISO (`ubuntu-merge-26.04.1-amd64.iso`) の SHA-256 照合後に APFS
+クローンで複製し (`48d88241cfab4a78f1d104319185a69c038fc988e2cfac5de9e708c81731ad51`)、
+追記スクリプトで統合層を足した ISO
+(`b4ce3f06c6e29a1ea77a2fc44ea284dee816e49a34ea6661b4501574c6d93537`、
+9,664,593,920 バイト) から、`-net none`・空 qcow2 20GB・RAM 4,096MiB・
+GRUB の Lubuntu 通常項目で起動し、Calamares で Erase disk
+(EFI 300MiB + `lubuntu_2604` 19.71GiB ext4)・利用者 test/testbox・
+`test1234` の条件で設置した。設置は 04:12 開始 → unpackfs (4 展開元) →
+dracut → `contextualprocess@before_bootloader` (自作 apt の 5 指名が通過) →
+grubcfg・bootloader・packages と進み、`completion: succeeded` (43/43) で
+終わった。標的ディスク単独の起動では GRUB → dracut → SDDM と上がり、
+SDDM には UBUNTU (`installer` 利用者) と TEST の 2 欄が出る
+(既定セッションは live のまま)。
+TTY3 で test/`test1234` ログインし、`startx /usr/bin/startlxqt` で LXQt の
+デスクトップ (壁紙・Computer/Network/test/Trash・下パネル・時計) を確認した。
+`dpkg --audit` は無出力、`sudo apt-get check` は Done で E: 行なし
+(終了 0 相当) である。`gnome-shell`・`ubuntu-server` は `un`、
+`ubuntu-desktop`・`subiquity` は該当なしで、GNOME/Server の混入は無い。
+`getcap /usr/bin/ping`・`/usr/bin/mtr-packet` は `cap_net_raw=ep` である。
+live 由来の残りは `installer` 利用者 (uid 1001。dpkg の所有なし) と
+`/home/installer`、live セッション定義
+(`/usr/share/xsessions/lubuntu-live-environment.desktop`)、
+`/pool` (`main`)・`/dists` (`resolute`。約 7MB。不活性)、
+`calamares` (`ii` 3.3.14)・`casper` (`ii` 26.04.2) である。
+`dracut` は dpkg 上 `un` だが実行体は統合層の蘇生分 (129,932 バイト) で
+設置段は通った。`libboost-python1.90.0` は `ii` で入っており、
+8 層時代の「不在」の記録は包名の差し (`1.90` と `1.90.0`) による。
+証拠は `build/evidence/lubuntu-install/` の `install7-*` (画面指紋・設置ログ)
+と `boot7-*` (標的起動の記録) である。
+
+#### 追記と設置の手順
+
+ISO への追記は次の 3 点である。いずれも既存 ISO の複製への差分追記だけで、
+層・pool の再生成や ISO 全体の作り直しはしない。入力 ISO 自体には書かない。
+
+- `/casper/common.dl.lubuntu.install.squashfs` (設置用上書き層。次項)。
+- `/casper/bootkit-chains/lubuntu.list` (親から子の 4 行。
+  `common.squashfs`、`common.dl.squashfs`、
+  `common.dl.lubuntu.squashfs`、`common.dl.lubuntu.install.squashfs`)。
+- `/boot/grub/grub.cfg` (`tools/ubuntu-merge/grub.py` の再生成。
+  追記スクリプトが `BOOTKIT_LUBUNTU_LEAF` で統合層の leaf を渡す。
+  既定は土台の leaf のままで、追記前の ISO は従来どおり起動できる)。
+
+toram の選択複写は連鎖の一覧 (`lubuntu.list`) を読むだけで、層の数に
+依存しない。統合層の名前は `valid_layer_name` の規則
+(`*.squashfs` で使える文字だけ) に収まり、4 層の連鎖を扱える。
+toram 項目での設置自体は未検証である。
+
+道具と再現の手順は次のとおり。追記の直後に `fix-pvd.py` で PVD 補正し、
+roundtrip を照合する。
+
+- 入力 ISO の SHA-256 照合後に APFS クローンで複製する
+  (`cp -c`。複製前後で SHA-256 が一致することを記録する)。
+- `sh tools/ubuntu-merge/add-lubuntu-install-layer.sh <入力ISO> <複製ISO>`:
+  設置用上書き層の構築・検証・追記を 1 回の起動で行う。pool の deb は
+  入力 ISO から読む。追記後の SHA-256 と大きさを記録する。
+- `python3 -I tools/offline-install/lubuntu-calamares-install.py
+  --iso <複製ISO> --disk <空qcow2> --prefix <接頭辞> --mem 4096`:
+  QEMU x86_64 / TCG / OVMF、`-net none`、空 qcow2 20GB で GRUB の
+  Lubuntu 通常項目から起動し、Try 選択後のデスクトップで Calamares を
+  起動する。Welcome まで自動で進み、以降は画面ごとに手動で進める。
+- 設置後は標的ディスク単独で起動し、LXQt のログイン・`dpkg --audit`・
+  `apt-get check`・GNOME/Server の不在・`getcap` を見る。
+
+再現の記録は `build/evidence/lubuntu-install/` に置く (追記層の構築記録
+`install-build.log`、複製前後の SHA-256、設置の画面指紋、標的起動の記録)。
+
+#### 層の構成
+
+設置用上書き層は 7,507,968 バイト・661 パスである。中身と目的は次の
+とおり。起動の overlay・toram 複写・unpackfs 展開の順はどれも親から子の
+4 層で一致する。
+
+- `etc/calamares/modules/unpackfs.conf`:起動の overlay と同じ順の 4 展開元
+  (原文 `tools/offline-install/lubuntu-unpackfs-install.conf`)。
+  先頭だけ無条件で、残りは通常の選択のときだけ展開する
+  (`installation_data.unpack_regular` は pkgselect が立てる)。
+- 白抜きの蘇生:live の leaf 層の whiteout (char/block 0,0) で Server 層に
+  実体がある物 (dracut 一式など 67 パス) を Server 層から抜いて同梱し、
+  leaf の whiteout を上書きして蘇らせる。写しだと標的で実行不能になる
+  (dracut 段が終了 126 で失敗する)。実体がどの層にも無い物
+  (dpkg の dracut 付属文書の一部など) は入れない。
+- xattr 補正 11 パス:統合層の `security.capability` の値の切れ
+  (`usr/bin/ping`・`usr/bin/mtr-packet` の公式 20 バイトに対し統合
+  5 バイト) を公式値で上書きし、unpack の `rsync -X` で欠落した 2 ファイル
+  の実体を補う。公式値の出所は
+  `tools/ubuntu-merge/lubuntu-xfix-official.json` である。
+  中身・モード・所有者・時刻は統合層の版のまま、正しい xattr だけ公式の
+  可視値で置く。whiteout は使わない。
+- `/pool`・`/dists`:bootloader の deb だけの最小 repo
+  (`grub-efi-amd64-signed`・`grub-efi-amd64-bin`・`grub-efi-amd64-unsigned`・
+  `grub2-common`・`shim-signed`・`efibootmgr` の 6 deb +
+  `dists/resolute` の索引) を層に同梱し、live の overlay 上の
+  `/pool`・`/dists` を `file:///` の素性 (`Trusted: yes`) で読む。
+  `contextualprocess@before_bootloader` が `grub-efi-amd64-signed` 等を
+  標的へ入れるのに要る。統合 ISO に pool が無いと `apt-get update` が
+  終了 100 になり、後の段が全部飛ぶ。deb の出所は入力 ISO の `/pool`
+  (読むだけ) で、依存の閉包は repo 内と統合層の既設で閉じること
+  (不足があれば中断する)。`Release` の `Date` は C ロケールで書く
+  (ja ロケールの `%a %b` は apt が `Invalid 'Date'` と警告する)。
+- `etc/calamares/modules/before_bootloader_context.conf`:手順本体を層内の
+  `bootrepo-apt.sh` に置き、conf 側は短い `sh ...` 呼び出し 1 行だけに
+  する。YAML の素朴な値に `:`+空白を含めると yaml-cpp が
+  `illegal map value` で読めず、Calamares が起動時に初期化失敗するため。
+- `etc/calamares/bootrepo-apt.sh`:`file:///` 素性の更新と bootloader 用
+  5 指名 (`grub-efi-amd64-signed`・`grub-efi-amd64-bin`・
+  `grub-efi-amd64-unsigned`・`shim-signed`・`efibootmgr`) の導入。
+  `--no-upgrade` は残して live の既設を変えない。指名漏れの新規依存は
+  入らないため、既設に無い物は指名に含める
+  (層の道具が指名集合の推移閉包を検査する)。
+
+層の道具 (`add-lubuntu-install-layer.sh`) の検査は次のとおり。
+stage と層に whiteout (char/block 0,0) が無いこと、補正 11 パスの xattr が
+公式値と一致すること、中身が統合層と一致すること (ping・mtr-packet を
+`cmp`)、指名集合の推移閉包が live 既設・repo 内・指名自体で閉じること、
+`Release` の `Date` の形式、conf の 4 展開元、`bootrepo-apt.sh` の 5 指名と
+`--no-upgrade` の保持である。追記後は ISO から取り出した層・list・grub.cfg
+と追記前の物を `cmp` で照合する。
+
+#### 白抜きの実測
+
+公式の live 層由来の whiteout (char/block 0,0) が leaf 層に残る。
+入力 ISO から `unsquashfs -ll` の種別数えで実測した値は Lubuntu 86・
+Ubuntu 81 である。いずれも overlay の表示では消えた形になり、起動の
+見た目には出ない。Lubuntu の 86 のうち Server 層に実体がある 67 を
+設置用上書き層で蘇らせ、上書きの順が overlay と同じため設置先は
+通常ファイルになる。残りはどの層にも実体が無い物で、標的に残っても
+設置の成否基準には触れない。
+
+#### live・installer 由来の混入の一覧と量
+
+公式 Lubuntu の設置元は live 層そのものを含むため、Calamares に live 由来物
+を消す後処理 (`try_remove`) は無く、unpack した連鎖分の live 由来が標的に
+入る。公式 manifest の差分では live だけの 44 包がある
+(`build/evidence/lubuntu-install/live-only-packages.txt`。
+`busybox-initramfs`・calamares 一式・casper・`lubuntu-installer-prompt`・
+initramfs 一式・`user-setup` など)。Server の公式 installer 層のような
+分離は Lubuntu の公式層に無く、この manifest 差分が除去一覧の代替になる。
+設置先ディスクの実測では、`installer` 利用者 (GECOS `Ubuntu`、shell
+`/usr/bin/subiquity-shell`。dpkg の所有なし) と `/home/installer`、
+live セッション定義
+(`/usr/share/xsessions/lubuntu-live-environment.desktop`)、
+`/pool`・`/dists` (約 7MB。不活性) が残る。`/casper` は標的に無い。
+
+#### 既知の制約
+
+- SDDM の既定セッションが live 環境のままである。LXQt には手動で
+  `Lubuntu.desktop` を選ぶ必要がある。live 定義の除去・既定の固定は
+  未実施である。
+- toram 項目での設置は未検証である (設計上は連鎖の一覧を読むだけで
+  通る見込み)。
+- Minimal 構成 (`unpack_regular` 偽) は未検証である。
+  (`unpack_regular` が偽のとき ping の capability 欠けが残る見込み。)
+- `libboost-python1.90.0` は設置先に `ii` で入っている。8 層時代の
+  「不在」の記録は包名の差し (`1.90` と `1.90.0`) による見落としで、
+  統合層での再確認で解消した。
+
+#### 設置の検証の道具
+
+`tools/offline-install/` の各道具の説明は次のとおり。証拠の置き場は
+`build/evidence/lubuntu-install/` である (現行では `build/` 全体が
+未追跡)。
+
+- `lubuntu-calamares-install.py`:統合 ISO から Lubuntu を Calamares で
+  標的ディスクへ入れる (第 1 起動)。GRUB の Lubuntu 通常項目を選び、
+  Calamares の Welcome まで自動で進める。
+- `lubuntu-guest-probe.py`:稼働中の QEMU に monitor+serial で接続し、
+  ゲストの現状を読む。画面も撮る。QEMU は残して終了する。
+- `uinput-click.py`:ゲスト内で uinput ポインタを作り、真座標に 1:1 で
+  動かして押す。ウィザードの選択・入力に使う。
+- `lubuntu-whiteout-rescue.py`:Lubuntu の leaf 層の whiteout のうち
+  Server 層に実体がある物を列挙する。
+- `lubuntu-xfix-official.json`:補正 11 パスの公式値
+  (中身の出所の層と xattr)。

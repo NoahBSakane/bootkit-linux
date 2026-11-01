@@ -8,6 +8,7 @@ import importlib.util
 import io
 from pathlib import Path
 import struct
+import subprocess
 import sys
 root = Path(sys.argv[1])
 def module(name, path):
@@ -36,6 +37,41 @@ assert cfg.count(' /casper/bootkit-ramsel.cpio.gz') == 3
 for osname in ('ubuntu', 'lubuntu', 'server'):
     assert cfg.count('bootkit.os=' + osname + ' ') == 3
     assert cfg.count('initrd /casper/initrd.' + osname) == 3
+# 既定の Lubuntu の leaf は土台層。統合層は環境変数で渡す。
+leaf = 'common.dl.lubuntu.install.squashfs'
+assert cfg.count('layerfs-path=common.dl.lubuntu.squashfs') == 3
+assert 'layerfs-path=' + leaf not in cfg
+for old in ('common.dl.lubuntu.unpackfs.squashfs',
+            'common.dl.lubuntu.unpackfs.xfix.squashfs',
+            'common.dl.lubuntu.unpackfs.xfix.bootrepo.squashfs',
+            'common.dl.lubuntu.unpackfs.xfix.bootrepo.ctxfix.squashfs',
+            'common.dl.lubuntu.unpackfs.xfix.bootrepo.ctxfix.aptfix.squashfs'):
+    assert 'layerfs-path=' + old not in cfg
+assert cfg.count('layerfs-path=common.dl.ubuntu.squashfs') == 3
+assert cfg.count('layerfs-path=common.server.squashfs') == 3
+import os
+env = dict(os.environ, BOOTKIT_LUBUNTU_LEAF=leaf)
+out = subprocess.run([sys.executable, '-I', str(root / 'tools/ubuntu-merge/grub.py')],
+                     capture_output=True, text=True, env=env, check=True).stdout
+assert out.count('layerfs-path=' + leaf) == 3
+assert 'layerfs-path=common.dl.lubuntu.squashfs ' not in out
+plan = module('plan', 'tools/ubuntu-merge/plan.py')
+assert leaf[:-len('.squashfs')] not in plan.NEW_LAYERS
+short = leaf[:-len('.squashfs')].split('.')
+known = set(plan.NEW_LAYERS)
+for i in range(len(short) - 1, 0, -1):
+    parent = '.'.join(short[:i])
+    assert parent in known, parent
+import re
+text = (root / 'tools/offline-install/lubuntu-unpackfs-install.conf').read_text()
+sources = re.findall(r'source: "([^"]+)"', text)
+assert sources == ['/cdrom/casper/' + x for x in
+                   ['common.squashfs', 'common.dl.squashfs',
+                    'common.dl.lubuntu.squashfs',
+                    leaf]]
+assert text.count('sourcefs: "squashfs"') == 4
+assert text.count('destination: ""') == 4
+assert text.count('condition: "installation_data.unpack_regular"') == 3
 for block in cfg.split('menuentry ')[1:10]:
     assert (' toram ' in block) == (' /casper/bootkit-ramsel.cpio.gz' in block)
 fix = module('fix', 'tools/ubuntu-merge/fix-pvd.py')

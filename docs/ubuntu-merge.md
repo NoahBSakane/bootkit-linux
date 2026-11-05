@@ -1,5 +1,8 @@
 # Ubuntu Merge (案 B2):共通の層を共有する統合 ISO
 
+この文書は旧設計(B2)の説明である。
+再層化版の現行仕様・作り方・検証範囲は [Ubuntu Merge: 再層化版の統合 ISO](ubuntu-merge-relayer.md)を参照する。
+
 公式の Ubuntu desktop・Lubuntu・Ubuntu Server(いずれも 26.04.1 amd64)を、
 共通の層を共有する 1 つの ISO に統合する。3 つの OS を別々に持つ案
 (B1)は採らない。各 OS の起動では、その OS の層の列だけが RAM に載り、

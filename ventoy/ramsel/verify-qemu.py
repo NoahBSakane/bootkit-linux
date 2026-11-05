@@ -527,6 +527,7 @@ def main():
                         'common.dl.snap.ubuntu.squashfs': 597102592,
                         'common.dl.snap.ubuntu.std.squashfs': 590053376,
                         'common.dl.snap.ubuntu.std.live.squashfs': 793112576,
+                        'common.dl.snap.ubuntu.std.live.kernel.squashfs': 4096,
                     },
                     'lubuntu': {
                         'common.squashfs': 1138008064,

@@ -287,3 +287,5 @@ python3 -I "$TOOLS/test_repack_stages.py" "$CASEBASE" "$WORK/r2a"
 echo "PASS: ubuntu-merge synthetic roundtrip"
 # 10. R2b: GRUBの9項目・ドット親・設置カタログ・展開条件の合成試験。
 python3 -I "$TOOLS/test_stages_layout.py" "$WORK/r2b"
+# 11. Ubuntu の設置用 APT 設定層と live 専用 kernel 設定層の内容・属性・再現性。
+python3 -I "$TOOLS/test_ubuntu_apt_stages.py" "$WORK/ubuntu-apt"

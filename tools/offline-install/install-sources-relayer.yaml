@@ -30,8 +30,8 @@ sources:
   locale_support: langpack
   name:
     en: Ubuntu Desktop (minimized)
-  path: common.dl.snap.ubuntu.squashfs
-  size: 3432247296
+  path: common.dl.snap.ubuntu.apt.squashfs
+  size: 3432251392
   type: fsimage-layered
   variant: desktop
 - description:
@@ -40,8 +40,8 @@ sources:
   locale_support: langpack
   name:
     en: Ubuntu Desktop
-  path: common.dl.snap.ubuntu.std.squashfs
-  size: 4022300672
+  path: common.dl.snap.ubuntu.std.apt.squashfs
+  size: 4022304768
   type: fsimage-layered
   variant: desktop
 version: 2

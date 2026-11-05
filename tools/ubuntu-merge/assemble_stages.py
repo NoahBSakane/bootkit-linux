@@ -32,6 +32,10 @@ LIVE = (
     ('server', 'ubuntu-server-minimal.ubuntu-server.installer', 'common.server.std.live', 27041792),
     ('server', 'ubuntu-server-minimal.ubuntu-server.installer.generic', 'common.server.std.live.generic', 98304),
 )
+APT_LAYERS = ('common.dl.snap.ubuntu.apt.squashfs',
+              'common.dl.snap.ubuntu.std.apt.squashfs')
+UBUNTU_LAYERS = (*APT_LAYERS, 'common.dl.snap.ubuntu.std.live.kernel.squashfs')
+CONFIG_LAYERS = (*UBUNTU_LAYERS, 'common.dl.snap.lubuntu.std.live.install.squashfs')
 lock = threading.Lock()
 
 
@@ -196,6 +200,10 @@ def finish(hashes):
     run(['sh', HERE / 'tools/ubuntu-merge/build-lubuntu-stages.sh', SRC / ISO['lubuntu'],
          WORK / 'install', HERE / 'tools/offline-install/lubuntu-unpackfs-stages.conf', layer], 'install')
     hashes[layer.name] = sha(layer)
+    run(['sh', HERE / 'tools/ubuntu-merge/build-ubuntu-apt-stages.sh', ROOT,
+         WORK / 'ubuntu-apt'], 'ubuntu-apt')
+    for name in UBUNTU_LAYERS:
+        hashes[name] = sha(ROOT / 'casper' / name)
     totals = validate(ROOT / 'casper', catalog)
     dump('chains', totals)
     dump('expected-layers', hashes)
@@ -237,7 +245,7 @@ def finish(hashes):
     for path in ('/boot', '/EFI', '/.disk', '/casper/vmlinuz', '/casper/initrd.ubuntu',
                  '/casper/initrd.lubuntu', '/casper/initrd.server', '/casper/bootkit-ramsel.cpio.gz',
                  '/casper/bootkit-chains', '/casper/bootkit-meta', '/casper/install-sources.yaml',
-                 '/casper/' + layer.name):
+                 *('/casper/' + name for name in CONFIG_LAYERS)):
         cmd += ['-find', path, '-type', 'f', '-exec', 'sort_weight', '100', '--']
     cmd += ['-commit']
     run(cmd, 'mkisofs')
@@ -249,6 +257,19 @@ def finish(hashes):
     shutil.rmtree(WORK)
     dump('cleanup', cleanup)
     print('R2B STATIC PASS', flush=True)
+
+
+def verify_priority(records, hashes):
+    """小さな設定層を含む優先ファイルが、大きな層より前にあることを調べる。"""
+    large_start = min(records['/casper/' + name]['lba'] for name in hashes
+                      if name not in CONFIG_LAYERS)
+    priority = [path for path in records if path.startswith(('/boot/', '/EFI/', '/.disk/', '/casper/bootkit-'))
+                or path.startswith('/casper/initrd.') or path in ('/casper/vmlinuz', '/casper/install-sources.yaml')
+                or path.removeprefix('/casper/') in CONFIG_LAYERS]
+    for path in priority:
+        row = records[path]
+        assert row['lba'] + row['blocks'] <= large_start, (path, row, large_start)
+    return large_start, priority
 
 
 def verify(hashes, boot_hashes, dists, totals):
@@ -308,14 +329,7 @@ def verify(hashes, boot_hashes, dists, totals):
                 assert hashlib.sha256(data).hexdigest() == digest, path
                 boot_checks[path] = digest
     dump('boot-roundtrip', boot_checks)
-    large_start = min(records['/casper/' + name]['lba'] for name in hashes
-                      if not name.endswith('.live.install.squashfs'))
-    priority = [path for path in records if path.startswith(('/boot/', '/EFI/', '/.disk/', '/casper/bootkit-'))
-                or path.startswith('/casper/initrd.') or path in ('/casper/vmlinuz', '/casper/install-sources.yaml')
-                or path.endswith('.live.install.squashfs')]
-    for path in priority:
-        row = records[path]
-        assert row['lba'] + row['blocks'] <= large_start, (path, row, large_start)
+    large_start, priority = verify_priority(records, hashes)
     report = run(['xorriso', '-indev', OUT, '-report_el_torito', 'plain', '-report_system_area', 'plain'], 'iso-structure', True)
     assert re.search(r'El Torito boot img\s*:\s*1\s+BIOS\s+y', report)
     assert re.search(r'El Torito boot img\s*:\s*2\s+UEFI\s+y', report)

@@ -9,7 +9,7 @@ def config():
              'set menu_color_normal=white/black',
              'set menu_color_highlight=black/light-gray']
     for osname, title, leaf in (
-        ('ubuntu', 'Ubuntu', 'common.dl.snap.ubuntu.std.live.squashfs'),
+        ('ubuntu', 'Ubuntu', 'common.dl.snap.ubuntu.std.live.kernel.squashfs'),
         ('lubuntu', 'Lubuntu', 'common.dl.snap.lubuntu.std.live.install.squashfs'),
         ('server', 'Ubuntu Server', 'common.server.std.live.generic.squashfs'),
     ):

@@ -10,7 +10,8 @@ INSTALL = (
 )
 CHAINS = {
     'ubuntu': ('common', 'common.dl', 'common.dl.snap', 'common.dl.snap.ubuntu',
-               'common.dl.snap.ubuntu.std', 'common.dl.snap.ubuntu.std.live'),
+               'common.dl.snap.ubuntu.std', 'common.dl.snap.ubuntu.std.live',
+               'common.dl.snap.ubuntu.std.live.kernel'),
     'lubuntu': ('common', 'common.dl', 'common.dl.snap', 'common.dl.snap.lubuntu',
                 'common.dl.snap.lubuntu.std', 'common.dl.snap.lubuntu.std.live',
                 'common.dl.snap.lubuntu.std.live.install'),
@@ -20,8 +21,8 @@ CHAINS = {
 CATALOG = {
     'ubuntu-server-minimal': ('common.server', 1335111680),
     'ubuntu-server': ('common.server.std', 1491410944),
-    'ubuntu-desktop-minimal': ('common.dl.snap.ubuntu', 3432247296),
-    'ubuntu-desktop': ('common.dl.snap.ubuntu.std', 4022300672),
+    'ubuntu-desktop-minimal': ('common.dl.snap.ubuntu.apt', 3432251392),
+    'ubuntu-desktop': ('common.dl.snap.ubuntu.std.apt', 4022304768),
 }
 OFFICIAL_TOTAL = {'ubuntu': 4815302656, 'lubuntu': 3757625344, 'server': 1518555136}
 

@@ -1,34 +1,42 @@
 # Ubuntu Merge: 再層化版の統合 ISO
 
 公式の Ubuntu Desktop・Lubuntu・Ubuntu Server 26.04.1 amd64 を、設置用の
-9 層を共有する 1 つの ISO に統合する。設置する内容と live 環境でだけ使う内容を
+9 層を共有し、Ubuntu の設置用 APT 設定層を 2 本、live 専用 kernel 設定層を
+1 本加えて 1 つの ISO に統合する。
+設置する内容と live 環境でだけ使う内容を
 分け、公式の Minimal と Normal を再構成できる構造にしている。
-Server と Lubuntu は、Normal・Minimal の計 4 通りでオフライン設置と設置後の
-単独起動を確認した。Ubuntu Desktop の設置は未実施である。
+Server・Lubuntu・Ubuntu Desktop は、Normal・Minimal の計 6 通りでオフライン設置と
+設置後の単独起動を確認した。Ubuntu Desktop は autoinstall での確認で、画面付きの
+対話での設置は未検証である(「既知の制約と未検証」を参照)。
 
-確認日は 2026-11-05。以下の数値は圧縮後のファイルサイズをバイト単位で示す。
+確認日は 2026-11-06。冒頭の ISO の値、後述の実測 LBA、静的検証結果は、
+Ubuntu 用 APT 設定層 2 本と live kernel 設定層 1 本を加えて組み立て直した
+最終 ISO のもの。以下の数値は圧縮後のファイルサイズをバイト単位で示す。
 非圧縮の内容量とは区別する。
 
 | 項目 | 値 |
 | --- | --- |
 | ISO | `build/ubuntu-merge-26.04.1-amd64-relayer.iso` |
-| 大きさ | 8,847,738,880 バイト、8.240099 GiB |
-| SHA-256 | `fe3bcfbece3e262bf3fea9720d3f47e44fe183afe0a808be7f6afec911342f14` |
+| 大きさ | 8,847,755,264 バイト、8.240114 GiB |
+| SHA-256 | `6f08bc1564c0d659af0826453740ae84cd87cebbd5f7ac4aeec2fc28aa6caebc` |
 | 設置用の層 | 9 本、合計 5,269,733,376 バイト |
-| 起動専用の追加層 | 公式 live・installer 4 本と Lubuntu 設定層 1 本 |
+| 起動専用の追加層 | 公式 live・installer 4 本、Lubuntu の設定層 1 本、Ubuntu の live kernel 設定層 1 本 |
+| 設置専用の追加層 | Ubuntu の APT 設定層 2 本(各 4,096 バイト) |
+| 収録する層の合計 | 17 本 |
 
-ISO のサイズと SHA-256 は実物で再確認した。R2b 報告の SHA-256
-`78e19917ceb0373f1037f9b937149fce612bfb82d2020f0f304a6417b61cad35` は、
-Lubuntu のブートローダー準備を直す前の値である。上表は R4b 報告と実物が一致する
-修正後の値で、サイズは修正前後で同じである。生成時刻などを固定する仕組みはなく、
-再生成した ISO 全体がこのハッシュになることを保証する手順ではない。
+ISO のサイズと SHA-256 は実物で再確認した。Ubuntu 用の設定層 3 本を加える前の ISO は
+8,847,738,880 バイト、SHA-256 `fe3bcfbece3e262bf3fea9720d3f47e44fe183afe0a808be7f6afec911342f14`
+(R2b 報告の `78e19917ceb0373f1037f9b937149fce612bfb82d2020f0f304a6417b61cad35` は、
+さらに Lubuntu のブートローダー準備を直す前の値)で、上表はそれより 16,384 バイト大きい。
+生成時刻などを固定する仕組みはなく、再生成した ISO 全体がこのハッシュになることを
+保証する手順ではない。
 
 旧 B2 設計は [旧設計の文書](ubuntu-merge.md)を参照する。
 再層化版の設置層・カタログ・起動の鎖は、この文書と `*_stages` 系の道具を使う。
 
 ## 層の設計
 
-### 設置用の 9 層
+### 設置用の共有 9 層と Ubuntu 用 APT 設定層
 
 SquashFS は圧縮された読み取り専用ファイルシステムである。複数の層を下から
 重ね、上の層の内容で同じパスを上書きする。ここでは各 OS の公式 minimal を
@@ -54,6 +62,20 @@ SquashFS は圧縮された読み取り専用ファイルシステムである�
 | `common.server.std` | Server の第 2 段 | 156,299,264 |
 | 合計 | 設置用 9 本 | 5,269,733,376 |
 
+組み立て時には、次の設置専用の設定層を加える。内容はどちらも
+`common.server.squashfs` から取り出した `etc/apt/sources.list.d/cdrom.sources`
+だけで、元の設置層・公式 live 層は変更しない。
+
+| 設定層名 | 設置時の親の最上層 | バイト |
+| --- | --- | ---: |
+| `common.dl.snap.ubuntu.apt` | `common.dl.snap.ubuntu` | 4,096 |
+| `common.dl.snap.ubuntu.std.apt` | `common.dl.snap.ubuntu.std` | 4,096 |
+
+設定層のサイズは手作業の試験層に基づく。所有者は root:root、ファイルは 644、
+ディレクトリは 755、全時刻は 0 とし、xattr は含めない。同じ入力から同じバイトを
+生成し、二つの leaf で共有する。これらは設置カタログからだけ参照し、
+`CHAINS` と `casper/bootkit-chains/<os>.list` には加えない。
+
 snap はアプリケーションの配布形式である。共有対象は bare・core24・firefox・
 firmware-updater・gnome-46-2404・gtk-common-themes・mesa-2404・snapd の 8 組。
 各 snap の `var/lib/snapd/snaps/` と `var/lib/snapd/seed/snaps/` は、同じ実体を
@@ -70,7 +92,7 @@ Server の鎖には `common.dl.snap` を入れない。
 という設計ではない。公式 live 層に在る whiteout を設置元へ混ぜずに済むことと、
 公式設置元が持つ削除の意味を保持することを分けて扱う。
 
-### 公式 live・installer 層と Lubuntu 設定層
+### 公式 live・installer 層と起動専用の設定層
 
 live は試用環境、installer は設置プログラムの実行環境を指す。
 次の 4 本は公式 ISO から抽出し、名前だけを変えて収録する。再圧縮はしない。
@@ -91,6 +113,17 @@ live は試用環境、installer は設置プログラムの実行環境を指�
 設定とスクリプト・5 個の deb と小さな APT 索引で、設置先へは展開しない。
 旧版の白抜き蘇生処理や xattr 補正層は使わない。
 
+Ubuntu の最上層にも、次の live 専用設定層を足す。
+
+| 設定層名(`.squashfs` 付き) | 内容 | バイト |
+| --- | --- | ---: |
+| `common.dl.snap.ubuntu.std.live.kernel.squashfs` | `etc/subiquity/kernel-meta-package` | 4,096 |
+
+内容は固定の `linux-generic-hwe-24.04` と改行 1 つで、ISO から取り出さず生成する。
+所有者は root:root、ファイルは 644、ディレクトリは 755、全時刻は 0、xattr は無し。
+サイズと再現性は合成試験で確認済み。この層は live 起動だけに使い、設置カタログ・
+設置元の鎖・共有 9 層の `INSTALL` には加えない。Server の起動鎖も変えない。
+
 ### casper のドット規則と 3 つの起動の鎖
 
 casper は Ubuntu 系 live 環境の起動処理である。`layerfs-path` で最上層(leaf)を
@@ -110,6 +143,7 @@ common.dl.snap.squashfs
 common.dl.snap.ubuntu.squashfs
 common.dl.snap.ubuntu.std.squashfs
 common.dl.snap.ubuntu.std.live.squashfs
+common.dl.snap.ubuntu.std.live.kernel.squashfs
 
 # lubuntu.list
 common.squashfs
@@ -135,10 +169,11 @@ live 起動はどの OS も Normal の設置層まで含み、設置時の選択
 
 | OS | 起動層数 | 起動の鎖の合計 | 公式主要層の合計 | 差 |
 | --- | ---: | ---: | ---: | ---: |
-| Ubuntu | 6 | 4,815,413,248 | 4,815,302,656 | +110,592 |
+| Ubuntu | 7 | 4,815,417,344 | 4,815,302,656 | +114,688 |
 | Lubuntu | 7 | 3,762,163,712 | 3,757,625,344 | +4,538,368 |
 | Server | 5 | 1,518,551,040 | 1,518,555,136 | -4,096 |
 
+Ubuntu は kernel 設定層の 4,096 バイトを加えた値である。
 いずれも公式の合計の +5% 以内である。これは層本体の合計で、OS の実行用 RAM や
 RAM 選択複写が確保する余裕は含まない。選択複写の仕組みは
 [RAM 選択複写](ubuntu-ramsel.md)を参照する。
@@ -284,8 +319,10 @@ sh tools/ubuntu-merge/assemble_stages.sh \
 
 `assemble_stages.sh` は `assemble_stages.py` を呼ぶ。設置用 9 層のハッシュを
 照合して組み立て領域へハードリンクし、公式 live・installer 層を抽出する。
-`build-lubuntu-stages.sh` で設定層を作り、`stages_layout.py` で鎖とカタログを検査、
-`grub_stages.py` で GRUB を生成する。設定層だけを生成する場合の引数は次の順。
+`build-lubuntu-stages.sh` で Lubuntu の設定層、`build-ubuntu-apt-stages.sh` で
+Ubuntu の設置用 APT 設定層と live 専用 kernel 設定層を作る。
+`stages_layout.py` で鎖とカタログを検査し、
+`grub_stages.py` で GRUB を生成する。Lubuntu 設定層だけを生成する場合の引数は次の順。
 
 ```sh
 sh tools/ubuntu-merge/build-lubuntu-stages.sh \
@@ -295,9 +332,23 @@ sh tools/ubuntu-merge/build-lubuntu-stages.sh \
   build/work/lubuntu-config.squashfs
 ```
 
+Ubuntu の APT・live kernel 設定層は、`casper/common.server.squashfs` を含む組み立て木と
+未使用の作業ディレクトリを指定する。出力は組み立て木の `casper/` に置く。
+
+```sh
+sh tools/ubuntu-merge/build-ubuntu-apt-stages.sh \
+  build/work/r2b/iso-root build/work/ubuntu-apt-config
+```
+
+`unsquashfs -no-xattrs` で対象ファイルだけを取り出し、xz・ブロックサイズ
+131,072 バイト、`-force-uid 0 -force-gid 0 -noappend -no-progress`
+`-all-time 0 -mkfs-time 0 -no-xattrs` で圧縮する。
+固定テキストから作る kernel 設定層も同じ圧縮指定を使う。
+生成した 3 層の SHA-256 も他の層と同じ検査一覧に入れる。
+
 組み立ては完成 ISO と `build/work/r2b` が無い状態で始める。既存物があれば停止する。
 出力は冒頭の ISO、検査記録は `build/work/logs/r2b-*`。
-ISO 内から全 14 層を再抽出してハッシュを照合し、pool・dists・起動ファイル・
+ISO 内から全 17 層を再抽出してハッシュを照合し、pool・dists・起動ファイル・
 LBA・ボリューム情報も検査する。成功後は組み立て用の一時領域を削除する。
 
 ```sh
@@ -311,7 +362,7 @@ case-sensitive 領域を環境変数で渡すのは、後者でも同じ有効�
 
 ## ISO の構成
 
-`/casper/` に全 14 層、共通の `vmlinuz`、OS ごとの `initrd.ubuntu`・
+`/casper/` に全 17 層、共通の `vmlinuz`、OS ごとの `initrd.ubuntu`・
 `initrd.lubuntu`・`initrd.server`、追加アーカイブ `bootkit-ramsel.cpio.gz`、
 `bootkit-chains/`、公式のメタデータを保存した `bootkit-meta/` を置く。
 `.disk/` は 3 OS の casper UUID を個別に保持する。UUID 照合を無効にせず、
@@ -328,8 +379,11 @@ case-sensitive 領域を環境変数で渡すのは、後者でも同じ有効�
 | --- | --- | ---: |
 | `ubuntu-server-minimal` | `common.server.squashfs` | 1,335,111,680 |
 | `ubuntu-server` | `common.server.std.squashfs` | 1,491,410,944 |
-| `ubuntu-desktop-minimal` | `common.dl.snap.ubuntu.squashfs` | 3,432,247,296 |
-| `ubuntu-desktop` | `common.dl.snap.ubuntu.std.squashfs` | 4,022,300,672 |
+| `ubuntu-desktop-minimal` | `common.dl.snap.ubuntu.apt.squashfs` | 3,432,251,392 |
+| `ubuntu-desktop` | `common.dl.snap.ubuntu.std.apt.squashfs` | 4,022,304,768 |
+
+Ubuntu の各項目は、元の設置層の合計にそれぞれ対応する APT 設定層の
+4,096 バイトだけを加える。Normal の親には Minimal 用の `.ubuntu.apt` は入らない。
 
 ISO 直下の `/dists` は Server 公式の署名を含む原本だけを収録する。
 `stable -> resolute`・`unstable -> resolute` も保持し、通常ファイルの全ハッシュを
@@ -348,33 +402,68 @@ safe graphics は `nomodeset` を足す。copy to RAM は `toram` を足し、�
 ファームウェア設定の補助 2 項目がある。メニュー文字列は ASCII の英語である。
 
 LBA は ISO 内の論理ブロックの番号で、ここでは 1 ブロック 2,048 バイト。
-起動関係を優先度 100、それ以外を 0 として、大きな層より手前へ置く。
-最初の大きな層 `common.squashfs` は LBA 165,665 から始まり、優先ファイル
-792 件の占有領域はすべてその前に収まる。実物と `r2b-lba.json` を照合した。
+起動関係・Lubuntu 設定層・Ubuntu 用 APT 設定層・live kernel 設定層を
+優先度 100、それ以外を 0 として、
+大きな層より手前へ置く。大きな層の最小 LBA の計算から設定層を除き、
+優先ファイルの占有領域がすべてその前に収まることを検査する。
+以下は最終 ISO の実測配置である。
+最初の大きな層 `common.squashfs` は LBA 165,673 から始まり、優先ファイル
+795 件の占有領域はすべてその前に収まる。実物と `r2b-lba.json` を照合した。
 
 | 対象 | 開始 LBA | 終了 LBA(占有する最後のブロック) |
 | --- | ---: | ---: |
-| `/.disk/` の非空ファイル全体 | 1,273 | 1,277 |
-| `/boot/` の非空ファイル全体 | 1,278 | 8,146 |
-| `/boot/grub/efi.img` | 1,278 | 3,851 |
-| `/boot/grub/grub.cfg` | 5,031 | 5,032 |
-| `/boot/grub/i386-pc/eltorito.img` | 5,267 | 5,282 |
-| `/casper/bootkit-ramsel.cpio.gz` | 9,535 | 9,537 |
-| Lubuntu 設定層 | 9,538 | 11,743 |
-| `/casper/initrd.lubuntu` | 11,744 | 59,858 |
-| `/casper/initrd.server` | 59,859 | 108,529 |
-| `/casper/initrd.ubuntu` | 108,530 | 155,154 |
-| `/casper/install-sources.yaml` | 155,155 | 155,155 |
-| `/casper/vmlinuz` | 155,156 | 163,601 |
-| `/EFI/` の非空ファイル全体 | 163,602 | 165,664 |
+| `/.disk/` の非空ファイル全体 | 1,275 | 1,279 |
+| `/boot/` の非空ファイル全体 | 1,280 | 8,148 |
+| `/boot/grub/efi.img` | 1,280 | 3,853 |
+| `/boot/grub/grub.cfg` | 5,033 | 5,034 |
+| `/boot/grub/i386-pc/eltorito.img` | 5,269 | 5,284 |
+| `/casper/bootkit-ramsel.cpio.gz` | 9,537 | 9,539 |
+| Lubuntu 設定層 | 9,540 | 11,745 |
+| Ubuntu の設定層 3 本(合計) | 11,746 | 11,751 |
+| `/casper/initrd.lubuntu` | 11,752 | 59,866 |
+| `/casper/initrd.server` | 59,867 | 108,537 |
+| `/casper/initrd.ubuntu` | 108,538 | 155,162 |
+| `/casper/install-sources.yaml` | 155,163 | 155,163 |
+| `/casper/vmlinuz` | 155,164 | 163,609 |
+| `/EFI/` の非空ファイル全体 | 163,610 | 165,672 |
 
 BIOS と UEFI の El Torito 起動イメージ、GRUB2 MBR を持つ。GRUB2 用の
 `--grub2-mbr`・`--grub2-boot-info` で位置値を補正し、boot-info-table の
 位置・長さ・チェックサムも検査する。実物には GPT は無い。
 `fix-pvd.py` はボリュームサイズの整合を調べるが、今回の新規生成物は補正不要だった。
-PVD(主ボリューム記述子)のサイズ 4,320,185 ブロックは、実ファイルサイズと一致する。
+PVD(主ボリューム記述子)のサイズ 4,320,193 ブロックは、実ファイルサイズと一致する。
 
 ## 設置の仕組み
+
+### Ubuntu Desktop
+
+ubuntu-desktop-bootstrap snap 内の subiquity が設置カタログから Minimal または
+Normal の leaf を選び、casper のドット規則で親を重ねて設置木を作る。
+最上層の `.apt.squashfs` が `/etc/apt/sources.list.d/cdrom.sources` を
+Server 層の同一内容で上書きし、ISO 直下の Server 公式 `/dists` と
+3 ISO 分の `/pool` を使う。
+
+Release の署名鍵が ISO ごとに違い、設置木の `cdrom.sources` が自分の ISO の
+鍵だけを信頼するため、Desktop の設定のままでは Server の Release を検証できない。
+Server の `Signed-By` を保持する設定層で署名鍵をそろえ、署名検証を有効なままにする。
+公式層はバイト単位で保持し、live 起動の鎖には APT 設定層を加えない。
+
+一方、live 起動の最上層には `.live.kernel.squashfs` を加える。
+subiquity が live 側の `/etc/subiquity/kernel-meta-package` をカタログの
+`kernel.default` より優先するため、ここで `linux-generic-hwe-24.04` を指定する。
+デスクトップ公式カタログは `linux-generic-hwe-24.04` で、Server 由来の
+`linux-generic` はデスクトップ設置木に無く、Server の `/dists` 索引にも無い。
+統合カタログの `kernel.default` は `linux-generic` のままにし、同パッケージが
+導入済みの Server 設置木には変更を加えない。kernel 設定層は設置元に含めない。
+
+検証時の autoinstall は `source: {id: ubuntu-desktop}` または
+`source: {id: ubuntu-desktop-minimal}`、`storage: {layout: {name: direct}}`、
+`updates: security`、`refresh-installer: {update: no}` を指定し、
+ネットワークなしで設置した。設定ファイルは
+`build/evidence/relayer-r4b/ubuntu-final/{normal,minimal}/autoinstall.yaml`。
+live には `/autoinstall.yaml` として置き、subiquity のサーバを再起動して読ませた。
+検証環境には画面が無く、画面側のクライアントが設置開始の確認を送れなかったため、
+ソケットへ `/meta/confirm` を手で送った(`ud-flow.sh`・`confirm.py`)。
 
 ### Server
 
@@ -448,7 +537,7 @@ SHA-256・デバイス番号。時刻とルートエントリは同一性の合�
 `security.capability` は公式 16 エントリ・完成層 12 エントリで、共有化による件数差を
 含めビューとして一致し、値はすべて 20 バイトだった。
 
-ISO の静的検証は全 14 層の再抽出ハッシュ、公式 live 4 層のバイト一致、
+ISO の静的検証は全 17 層の再抽出ハッシュ、公式 live 4 層のバイト一致、
 カタログ 4 項目、ドット規則と鎖、pool・dists、GRUB、LBA、起動イメージの位置値、
 PVD の整合が合格。最終 ISO の値は `build/work/logs/r2b-verification.json` にある。
 R4b 修正後の回帰試験は `r4b-space-test.log` の末尾で全試験成功・`exit=0`。
@@ -470,6 +559,8 @@ QEMU・UEFI、`-net none` で検証した。結果は R4b 報告、
 | Server Minimal | 完了 | 起動・ログイン | 空 | `apt-get check` 終了 0 |
 | Lubuntu Normal | 43/43 完了 | SDDM・LXQt に到達 | 空 | 通常項目の 3 回中 2 回でパニック |
 | Lubuntu Minimal | 43/43 完了 | SDDM・LXQt に到達 | 空 | 通常項目の 1 回の起動は正常 |
+| Ubuntu Normal | 完了(確認から電源断まで約 31 分) | GDM のログイン画面に到達(UEFI) | 空 | 利用者 `ubuntu` のみ |
+| Ubuntu Minimal | 完了(同、約 25 分) | GDM のログイン画面に到達(UEFI) | 空 | 利用者 `ubuntu` のみ |
 
 Server の Normal・Minimal の設置済みパッケージ数はそれぞれ 713・508。
 両方とも subiquity・casper・calamares・ubuntu-desktop・gnome-shell は無く、
@@ -497,6 +588,33 @@ Lubuntu の比較は `lubuntu-installed-inspection.txt` による。live ISO か
 通常の Lubuntu・lxqt・openbox セッションは在るが、live 専用セッションは無い。
 Server に在る `/var/log/installer` の設置ログや `/cdrom` などまで含めて、
 すべての設置関連パスが無いという意味ではない。
+
+Ubuntu の設置は、OVMF の UEFI と、kernel・initrd・`layerfs-path` を直接指定する
+live 起動で行い、設置先は 1 GiB の ESP(vfat)と ext4 の構成になった。設置後ディスクだけを
+UEFI で起動し、約 8 分後に GDM のログイン画面を撮影した(画面は暗転していたため、
+Esc を送って復帰させた)。中身は、読み取り専用で接続した live から調べた。
+証拠は `build/evidence/relayer-r4b/ubuntu-final/{normal,minimal}/`
+(`installed-inspection.txt`・`install-flow.log`・`boot-alone/`)。
+
+| 項目 | Normal | Minimal |
+| --- | --- | --- |
+| 設置済みパッケージ数(ii) | 1,769 | 1,541 |
+| 状態が ii でないパッケージ | `rc grub-pc` のみ | 同左 |
+| grub-efi-amd64-signed・shim-signed | あり | あり |
+| ubuntu-desktop | あり | なし |
+| ubuntu-desktop-minimal・gdm3・gnome-shell・cloud-init・snapd | あり | あり |
+| linux-generic-hwe-24.04・-26.04、linux-image-7.0.0-30-generic | あり | あり |
+| casper・subiquity・ubiquity・calamares・lubuntu-live | なし | なし |
+| 作成した利用者 | `ubuntu` のみ | 同左 |
+| ホスト名 | `ubuntu-desktop` | `ubuntu-minimal` |
+| `/pool`・`/dists`・`/casper`・`/rofs`・`/etc/subiquity`・`/autoinstall.yaml` | なし | なし |
+| `/etc/apt/sources.list.d/cdrom.sources` | なし | なし |
+| `/cdrom` | 空のディレクトリ | 同左 |
+| `ping` の capability | `cap_net_raw=ep` | `cap_net_raw=ep` |
+
+`rc grub-pc` は、live の BIOS 用 GRUB が設置時に外され、設定ファイルだけが残った
+状態である。`/var/lib/snapd/seed` の中身、`apt-get check`、`systemctl` の状態は
+Ubuntu では調べていない。
 
 ### 起動と RAM 選択複写
 
@@ -542,10 +660,46 @@ SHA-256 が記録されておらず、最終ハッシュの ISO で同じ 6 条�
 未確認である。また、旧 B2 の safe graphics・SeaBIOS・Ventoy の結果を、
 再層化版の検証済み項目へ移して数えない。
 
+### 最終 ISO での GRUB 起動の再確認
+
+Ubuntu の起動の鎖を 7 層に変えて ISO を組み立て直したため、最終 ISO
+(SHA-256 `6f08bc15…aebc`)で、R4a と同じ駆動(`ventoy/ramsel/verify-qemu.py --mode uefi-grub`、
+QEMU x86_64・q35・TCG・UEFI・ネットワークなし、serial と HMP)を 4 項目で再実行した。
+証拠は `build/evidence/relayer-r5/`、実行記録は `build/work/logs/r5-*.log`。
+
+| OS・項目 | RAM(MiB) | 証拠の接頭辞 | 結果 |
+| --- | ---: | --- | --- |
+| Ubuntu toram(項目 2) | 8,192 | `ubuntu-toram` | `/proc/cmdline` が `layerfs-path=common.dl.snap.ubuntu.std.live.kernel.squashfs toram`。GNOME のログイン画面。取り外し後、7 層の全体読出し成功(`READ_LAYER_COUNT=7`・`MEDIA_READ_RC=0`)、Python・`apt-get check`(`APT_RC=0`)成功 |
+| Ubuntu 通常(項目 0) | 8,192 | `ubuntu-normal` | `/proc/cmdline` が同じ leaf。GNOME のログイン画面。取り外し後は `READ_LAYER_COUNT=0`・`MEDIA_READ_RC=1`(元媒体への依存の対照) |
+| Server 通常(項目 6) | 4,096 | `server-normal` | `layerfs-path=common.server.std.live.generic.squashfs`。subiquity の言語選択画面。取り外し後は `READ_LAYER_COUNT=0`(対照) |
+| Lubuntu 通常(項目 3) | 4,096 | `lubuntu-normal2` | `layerfs-path=common.dl.snap.lubuntu.std.live.install.squashfs`。取り外し後は `READ_LAYER_COUNT=0`・`MEDIA_READ_RC=1`(対照) |
+
+Ubuntu toram の `/cdrom`(tmpfs)の使用量は 4,815,441,920 バイトで、起動の鎖の合計
+4,815,417,344 バイトより 24,576 バイト多く、R4a の 3 OS と同じ差だった。
+Lubuntu を `--desktop lxqt` 付きで起動した初回は、R4a と同じく LXQt プロセス待ちで失敗
+した(`r5-lubuntu-normal.log`)。上表は R4a と同じ条件(`--desktop` なし)の再実行である。
+Lubuntu と Server の toram 項目は、今回は再実行していない(層と鎖は変えていないが、
+最終 ISO での実行結果は未確認)。画面は黒または起動途中の場合があり、Lubuntu の
+live デスクトップへの到達は、この再確認では判定していない。
+
 ## 既知の制約と未検証
 
-- Ubuntu Desktop の設置は `ubuntu-desktop`・`ubuntu-desktop-minimal` とも未実施。
-  カタログの静的整合と live 起動の記録が、設置成功を意味するわけではない。
+- Ubuntu Desktop の設置は autoinstall での確認である。画面付きの対話の設置
+  (設置プログラムの画面を操作する経路)は未検証。検証環境ではクライアントが設置開始の
+  確認を送れなかったため、`/meta/confirm` を手で送った。
+- Ubuntu Desktop の設置は、OVMF の UEFI と、kernel・initrd・`layerfs-path` を直接指定した
+  live 起動で行った。GRUB メニューの Ubuntu 項目から起動した live での設置は未実施。
+  BIOS 起動の live での設置は、設定層を手で足した試験用 ISO で Normal を 1 回通した
+  だけで、最終 ISO では未実施。
+- Ubuntu の live を UEFI・直接カーネル指定で起動した 1 回が、ログイン前に約 1 時間
+  停止した(画面は起動途中、シリアルは無応答)。原因は未検証。同じ構成で設置用に起動した
+  2 回と、BIOS・直接カーネル指定の起動はすべてログインに届いた。
+  過去には、UEFI の GRUB 経由で起動した live で snapd の seeding が失敗した観察が 1 回
+  ある(試験用の記録 `relayer-r4b/ubuntu-desktop/snap-seeding-failure.txt`)。
+  いずれも原因は未検証で、同じ現象かも未確認。
+- Ubuntu の live 自身の apt は、`/cdrom` の Release(Server の署名)を、live 側の
+  `cdrom.sources`(Desktop の鍵だけを信頼)で検証できず、「not signed」と表示する。
+  確認した範囲では設置の成否に影響していない。
 - toram 項目からの設置は未実施。媒体取り外し後の全層読出し・Python・APT の確認は、
   設置プログラムが追加データを要求する経路の検証を含まない。
 - Lubuntu Normal の設置後ディスクを通常の GRUB 項目(`quiet splash`)で起動した
@@ -582,7 +736,8 @@ SHA-256 が記録されておらず、最終ハッシュの ISO で同じ 6 条�
   `tools/offline-install/` の `server-autoinstall.py`・`verify-installed-r4b.py`・
   `lubuntu-calamares-install.py`・`lubuntu-calamares-drive.py`・`lubuntu-guest-probe.py`
   が検証用の操作と採取を支援する。
-- 回帰: `tests/test-ubuntu-merge.sh`、`test_repack_stages.py`・`test_stages_layout.py`。
+- 回帰: `tests/test-ubuntu-merge.sh`、`test_repack_stages.py`・`test_stages_layout.py`・
+  `test_ubuntu_apt_stages.py`。APT・live kernel 設定層の内容・属性・再現性を合成入力で調べる。
   `ventoy/ramsel/verify-qemu.py` の期待層名とサイズも再層化版へ更新されている。
   期待表の更新自体は QEMU や Ventoy での実行結果ではない。
 

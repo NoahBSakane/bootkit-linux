@@ -29,6 +29,11 @@ mkdir -p "$COPY/.test-tmp"
 # 個々の試験が TMPDIR を使う場合も、必ず空白を含むコピー内で動かす。
 TMPDIR=$COPY/.test-tmp
 export TMPDIR
+# 大文字小文字を区別する作業領域(マウント済み)はコピーに含まれないので、コピー元の実体を使う。
+if [ -z "${BOOTKIT_CASE_STAGE:-}" ] && [ -d "$HERE/build/work/cs" ]; then
+    BOOTKIT_CASE_STAGE=$HERE/build/work/cs
+    export BOOTKIT_CASE_STAGE
+fi
 cd "$COPY"
 tests='test-diag-packages.sh test-flavor-files.sh test-forky-hook.sh test-boot-config.sh test-survey.sh test-disk-guard.sh test-release-assets.sh'
 for optional in test-additive.sh test-calamares-layers.sh test-installer-layer.sh test-installer-layer-mutations.sh test-layers.sh test-layer-mutations.sh test-ventoy-merge.sh test-qemu-boot-args.sh test-ubuntu-merge.sh test-ubuntu-merge-boot.sh test-forky-deps.py; do

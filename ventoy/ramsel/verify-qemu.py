@@ -520,11 +520,30 @@ def main():
                 measured[marker] = serial.run(command, marker.encode(), 300, command)
             if args.mode in ('ventoy-uefi', 'ventoy-bios') and args.expect_os is not None:
                 expected = {
-                    'server': {'common.squashfs': 1297666048, 'common.server.squashfs': 217894912},
-                    'lubuntu': {'common.squashfs': 1297666048, 'common.dl.squashfs': 472125440,
-                                'common.dl.lubuntu.squashfs': 1980141568},
-                    'ubuntu': {'common.squashfs': 1297666048, 'common.dl.squashfs': 472125440,
-                               'common.dl.ubuntu.squashfs': 2952462336},
+                    'ubuntu': {
+                        'common.squashfs': 1138008064,
+                        'common.dl.squashfs': 393572352,
+                        'common.dl.snap.squashfs': 1303564288,
+                        'common.dl.snap.ubuntu.squashfs': 597102592,
+                        'common.dl.snap.ubuntu.std.squashfs': 590053376,
+                        'common.dl.snap.ubuntu.std.live.squashfs': 793112576,
+                    },
+                    'lubuntu': {
+                        'common.squashfs': 1138008064,
+                        'common.dl.squashfs': 393572352,
+                        'common.dl.snap.squashfs': 1303564288,
+                        'common.dl.snap.lubuntu.squashfs': 506413056,
+                        'common.dl.snap.lubuntu.std.squashfs': 387616768,
+                        'common.dl.snap.lubuntu.std.live.squashfs': 28471296,
+                        'common.dl.snap.lubuntu.std.live.install.squashfs': 4517888,
+                    },
+                    'server': {
+                        'common.squashfs': 1138008064,
+                        'common.server.squashfs': 197103616,
+                        'common.server.std.squashfs': 156299264,
+                        'common.server.std.live.squashfs': 27041792,
+                        'common.server.std.live.generic.squashfs': 98304,
+                    },
                 }[args.expect_os]
                 actual = {name: int(size) for name, size in re.findall(
                     r'(?m)^(common[^ ]*[.]squashfs) (\d+)$', measured['FILES_DONE'])}

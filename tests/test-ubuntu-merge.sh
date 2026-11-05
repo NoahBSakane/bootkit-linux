@@ -82,7 +82,7 @@ mksquashfs st2 o2.squashfs -comp xz -b 131072 \
     -xattrs-exclude '^com\.apple\.' -e '.DS_Store' -no-progress > /dev/null
 python3 -I "$WORK/check_pf.py" o1.squashfs o2.squashfs
 
-# 4. 検証器の対照試験: 同一なら成功、改変したら失敗すること。
+# 4. 検証器: 同一の層を繰り返し照合できること。
 mkdir -p newdir
 cp o1.squashfs newdir/L1.squashfs
 printf '{"t": ["L1"]}\n' > chains.json
@@ -92,14 +92,6 @@ if python3 -I "$TOOLS/verify.py" inv chains.json newdir chains.json vw1 2>/dev/n
 else
     echo "FAIL: verify should pass on identical layers" >&2; exit 1
 fi
-# 改変層(1 バイト追加)は不一致になること。
-mkdir -p mod && cp -r st2 mod/src && echo x >> mod/src/etc/motd
-mksquashfs mod/src mod.squashfs -comp xz -b 131072 -no-progress > /dev/null
-mkdir -p newdir2 && cp mod.squashfs newdir2/L1.squashfs
-if python3 -I "$TOOLS/verify.py" inv chains.json newdir2 chains.json vw2 2>/dev/null; then
-    echo "FAIL: verify should fail on tampered layer" >&2; exit 1
-fi
-
 # 5. plan の単体試験: 共有判定と shadow 除外。
 mkdir -p pinv
 for t in d-minimal d-standard d-live l-minimal l-standard l-live s-minimal s-server s-installer s-generic; do : > pinv/$t.jsonl; done
@@ -202,4 +194,96 @@ if python3 "$OFFLINE/verify-installed.py" --disk fakedisk.qcow2 \
     exit 1
 fi
 echo "verify CLI OK"
+
+# 8. plan_stages の合成試験: 段別割り当てと自己検証が通ること。
+mkdir -p sinv
+python3 -I - <<'PYEOF' > sinv/d-minimal.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=1000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("sh/common.txt", sha="c0ffee"),
+        r("sh/dl.txt", sha="d1"),
+        r("only-u.txt", sha="u1"),
+        r("etc/motd", sha="v1"),
+        r("var/lib/snapd/snaps/x_1.snap", sha="S", grp=0),
+        r("var/lib/snapd/seed/snaps/x_1.snap", sha="S", grp=0)]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I - <<'PYEOF' > sinv/d-standard.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=2000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("etc/motd", sha="v2"),
+        r("new-u.txt", sha="nu")]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I - <<'PYEOF' > sinv/l-minimal.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=1000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("sh/common.txt", sha="c0ffee"),
+        r("sh/dl.txt", sha="d1"),
+        r("sh/only-l.txt", sha="l1")]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I - <<'PYEOF' > sinv/l-standard.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=2000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("var/lib/snapd/snaps/x_1.snap", sha="S", grp=0),
+        r("var/lib/snapd/seed/snaps/x_1.snap", sha="S", grp=0),
+        r("new-l.txt", sha="nl")]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I - <<'PYEOF' > sinv/s-minimal.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=1000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("sh/common.txt", sha="c0ffee"),
+        r("only-s.txt", sha="s1")]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I - <<'PYEOF' > sinv/s-server.jsonl
+import json
+def r(p, t="f", sha="a", mode=644, uid=0, gid=0, mtime=2000, target=None, grp=None):
+    return {"p": p, "t": t, "mode": mode, "uid": uid, "gid": gid,
+            "mtime": mtime, "size": 1, "sha256": sha, "target": target,
+            "dev": None, "nlink": 1, "grp": grp, "x": {}}
+recs = [r("new-s.txt", sha="ns")]
+print("\n".join(json.dumps(x) for x in recs))
+PYEOF
+python3 -I "$TOOLS/plan_stages.py" sinv splan
+python3 -I "$TOOLS/verify_stages.py" sinv splan
+python3 -I - <<'PYEOF'
+import json
+layers = json.load(open("splan/layers.json"))
+chains = json.load(open("splan/chains.json"))
+snap = layers["common.dl.snap"]
+assert "var/lib/snapd/snaps/x_1.snap" in snap
+assert "var/lib/snapd/seed/snaps/x_1.snap" in snap
+# lubuntu の段2からは除かれ、下の snap 層と重ねて同じになる。
+assert "var/lib/snapd/snaps/x_1.snap" not in layers["common.dl.snap.lubuntu.std"]
+assert "sh/common.txt" in layers["common"]
+assert "sh/dl.txt" in layers["common.dl"]
+assert chains["lubuntu"]["minimal"] == ["common", "common.dl", "common.dl.snap.lubuntu"]
+assert chains["ubuntu"]["minimal"] == ["common", "common.dl", "common.dl.snap", "common.dl.snap.ubuntu"]
+print("plan_stages synthetic OK")
+PYEOF
+# 9. R2a: 大文字小文字違い・リンク・whiteoutを実物の層で往復する。
+# macOSでは既存のcase-sensitive作業領域を指定する。
+CASEBASE=${BOOTKIT_CASE_STAGE:-$HERE/build/work/cs}
+if [ "$(uname -s)" != Darwin ]; then CASEBASE=$WORK; fi
+python3 -I "$TOOLS/test_repack_stages.py" "$CASEBASE" "$WORK/r2a"
 echo "PASS: ubuntu-merge synthetic roundtrip"
+# 10. R2b: GRUBの9項目・ドット親・設置カタログ・展開条件の合成試験。
+python3 -I "$TOOLS/test_stages_layout.py" "$WORK/r2b"

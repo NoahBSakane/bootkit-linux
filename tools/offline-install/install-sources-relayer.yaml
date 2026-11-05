@@ -1,0 +1,47 @@
+kernel:
+  default: linux-generic
+sources:
+- description:
+    en: This version has been customized to have a small runtime footprint in environments
+      where humans are not expected to log in.
+  id: ubuntu-server-minimal
+  locale_support: none
+  name:
+    en: Ubuntu Server (minimized)
+  path: common.server.squashfs
+  size: 1335111680
+  type: fsimage-layered
+  variant: server
+- default: true
+  description:
+    en: The default install contains a curated set of packages that provide a comfortable
+      experience for operating your server.
+  id: ubuntu-server
+  locale_support: locale-only
+  name:
+    en: Ubuntu Server
+  path: common.server.std.squashfs
+  size: 1491410944
+  type: fsimage-layered
+  variant: server
+- description:
+    en: A minimal but usable Ubuntu Desktop.
+  id: ubuntu-desktop-minimal
+  locale_support: langpack
+  name:
+    en: Ubuntu Desktop (minimized)
+  path: common.dl.snap.ubuntu.squashfs
+  size: 3432247296
+  type: fsimage-layered
+  variant: desktop
+- description:
+    en: A full featured Ubuntu Desktop.
+  id: ubuntu-desktop
+  locale_support: langpack
+  name:
+    en: Ubuntu Desktop
+  path: common.dl.snap.ubuntu.std.squashfs
+  size: 4022300672
+  type: fsimage-layered
+  variant: desktop
+version: 2

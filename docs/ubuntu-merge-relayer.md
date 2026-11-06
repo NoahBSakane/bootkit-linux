@@ -582,6 +582,7 @@ QEMU・UEFI、`-net none` で検証した。結果は R4b 報告、
 | Lubuntu Minimal | 43/43 完了 | SDDM・LXQt に到達 | 空 | 通常項目の 1 回の起動は正常 |
 | Ubuntu Normal | 完了(確認から電源断まで約 31 分) | GDM のログイン画面に到達(UEFI) | 空 | 利用者 `ubuntu` のみ |
 | Ubuntu Minimal | 完了(同、約 25 分) | GDM のログイン画面に到達(UEFI) | 空 | 利用者 `ubuntu` のみ |
+| Ubuntu Normal(BIOS、SeaBIOS) | 完了(確認から電源断まで約 80 分。他の QEMU 2 台が並走) | GDM のログイン画面に到達(BIOS) | 空 | `apt-get check` 終了 0、1,765 パッケージ(ii)、`grub-pc` あり・`grub-efi-amd64-signed`・`shim-signed` なし、利用者 `ubuntu` のみ |
 
 Server の Normal・Minimal の設置済みパッケージ数はそれぞれ 713・508。
 両方とも subiquity・casper・calamares・ubuntu-desktop・gnome-shell は無く、
@@ -636,6 +637,40 @@ Esc を送って復帰させた)。中身は、読み取り専用で接続した
 `rc grub-pc` は、live の BIOS 用 GRUB が設置時に外され、設定ファイルだけが残った
 状態である。`/var/lib/snapd/seed` の中身、`apt-get check`、`systemctl` の状態は
 Ubuntu では調べていない。
+
+### 最終 ISO での設置の再確認
+
+最終 ISO(SHA-256 `6f08bc15…aebc`、実行の前後で不変)で、Server・Lubuntu の
+Normal・Minimal と Ubuntu の BIOS 設置を再実行した。QEMU、`-net none`、
+設置後ディスクだけでの起動で、検査は設置後のシステムの中で行った(Lubuntu は
+QTerminal に `sendkey` で打った画面の撮影、Server・Ubuntu は serial)。
+Ubuntu の BIOS Normal は上の表の行に記した。
+
+| 対象 | 設置 | 単独起動 | `dpkg --audit` | `apt-get check` | パッケージ数(ii) |
+| --- | --- | --- | --- | --- | --- |
+| Server Normal | 完了(QEMU 約 39 分) | ログイン | 空 | 終了 0 | 713(R4b と同数) |
+| Server Minimal | 完了(`minimal2`、設置途中で 1 回再開) | ログイン | 空 | 終了 0 | 508(R4b と同数) |
+| Lubuntu Normal | 「All done.」到達(約 82 分。ホスト負荷が高かった) | SDDM・LXQt に到達 | 空 | 終了 0 | 1,972(R4b と同数) |
+| Lubuntu Minimal | 「All done.」到達(約 45 分) | SDDM・LXQt に到達 | 空 | 終了 0 | 1,658(R4b と同数) |
+| Ubuntu Minimal(BIOS、SeaBIOS) | 完了(約 41 分。`network:` を外した autoinstall) | GDM のログイン画面に到達。`systemctl --failed` は 0 件 | 空 | 終了 0 | 1,537(`grub-pc` あり・`grub-efi-amd64-signed`・`shim-signed` なし) |
+
+- Server・Lubuntu は設置後の中身(casper・subiquity・calamares の不在、`/pool`・`/dists` の不在、
+  snapd の有無など)も R4b と同じだった。Lubuntu は、通常項目(`quiet splash`)を各 1 回起動し、
+  カーネルパニックは 0 回だった(1 回の観察で、前回との比較はできない)。
+- Server Minimal の最初の設置では、`apt-get check` が終了 100 だった。cloud-init の apt が
+  dpkg のロックを保持していた競合で、ログで裏づけた。ロックの待ちを付けた `minimal2` は終了 0。
+- 設置途中の `netplan apply` は、断続的に D-Bus の呼び出しが時間切れ(`Connection timed out`、
+  25 秒前後)になり、subiquity が `NETWORK_FAIL` で止まる。Server Minimal の再設置
+  (ISO を付けた通常起動)と Ubuntu Minimal の BIOS 設置で再現した。ゲスト内で手で実行すると
+  終了 0 だが 35〜40 秒かかった。原因は、TCG とホスト高負荷の組み合わせという仮説で、
+  未検証。ISO 側の要因は切り分けていない。回避は、Server では subiquity-server の
+  再起動(autoinstall の最初からの再実行)、Ubuntu Minimal では autoinstall から `network:` の
+  1 行を外すこと(subiquity が `netplan apply` を飛ばす)。Ubuntu Minimal の合格は、
+  `network:` を外した条件に限る。
+- Lubuntu は serial が使えず、Calamares の 43/43 は直接確認していない。「All done.」ページの
+  到達と設置後ディスクの内容で成功と判断した。
+- 証拠は `build/evidence/relayer-r6-server/`・`relayer-r6-lubuntu/`・
+  `relayer-r6-ubuntu-bios/minimal/`。
 
 ### 起動と RAM 選択複写
 
@@ -758,8 +793,13 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
   確認を送れなかったため、`/meta/confirm` を手で送った。
 - Ubuntu Desktop の設置は、OVMF の UEFI と、kernel・initrd・`layerfs-path` を直接指定した
   live 起動で行った。GRUB メニューの Ubuntu 項目から起動した live での設置は未実施。
-  BIOS 起動の live での設置は、設定層を手で足した試験用 ISO で Normal を 1 回通した
-  だけで、最終 ISO では未実施。
+  BIOS 起動の live(SeaBIOS、kernel・initrd・`layerfs-path` を直接指定)での設置は、
+  最終 ISO で Normal が通った(上の表。証拠は `build/evidence/relayer-r6-ubuntu-bios/normal/`)。
+  Minimal は `network:` を外した autoinstall で通った(「最終 ISO での設置の再確認」。
+  同じ autoinstall での再現は未確認)。
+  BIOS の GRUB メニュー項目から起動した live での設置は未実施。設置後に GDM から実際に
+  ログインした確認はしていない(ログイン画面の表示まで)。UEFI 版との設置済みパッケージ数の
+  差(UEFI 1,769〔`rc grub-pc` を含む〕、BIOS 1,765〔ii〕)は、原因を調べていない。
 - Ubuntu の live を UEFI・直接カーネル指定で起動した 1 回が、ログイン前に約 1 時間
   停止した(画面は起動途中、シリアルは無応答)。原因は未検証。同じ構成で設置用に起動した
   2 回と、BIOS・直接カーネル指定の起動はすべてログインに届いた。
@@ -769,8 +809,15 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
 - Ubuntu の live 自身の apt は、`/cdrom` の Release(Server の署名)を、live 側の
   `cdrom.sources`(Desktop の鍵だけを信頼)で検証できず、「not signed」と表示する。
   確認した範囲では設置の成否に影響していない。
-- toram 項目からの設置は未実施。媒体取り外し後の全層読出し・Python・APT の確認は、
-  設置プログラムが追加データを要求する経路の検証を含まない。
+- toram 項目からの設置は完走していない(Server で試行)。複写後に `eject -f cd0` で媒体を
+  取り外すと、autoinstall の apt が `/cdrom/dists/resolute/Release` と、GRUB・shim などの
+  deb(`/cdrom/pool/…`)を要求して失敗する。toram の複写対象は層だけで、`/dists` と `/pool` は
+  含まないため。`/dists`(約 319 KB)を足すと apt の更新は通ったが、続く GRUB・shim の
+  パッケージ設置が `/pool` の不在で失敗した。`/pool` 全体は約 2.4 GB で、Server の RAM 4 GiB の
+  tmpfs には入らない。複写対象に `/dists` と設置に要る deb を足す案は、実施・検証していない。
+  媒体取り外し後の全層読出し・Python・APT の確認は、設置プログラムが追加データを要求する
+  経路の検証を含まない。証拠は `build/evidence/relayer-r6-server/toram/`
+  (`toram-diag7.txt`・`toram-diag15.txt` など)。
 - Lubuntu Normal の設置後ディスクを通常の GRUB 項目(`quiet splash`)で起動した
   3 回のうち 2 回で、約 4 分後に `KERNEL PANIC! Fatal exception in interrupt`
   が出た。3 回目は SDDM に到達し、別途 `quiet splash` を外して serial を足した

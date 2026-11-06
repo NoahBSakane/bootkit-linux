@@ -211,6 +211,18 @@ def finish(hashes):
         extract(osname, '/pool', ROOT / 'pool', 'pool-' + osname)
         writable(ROOT / 'pool')
     extract('server', '/dists', ROOT / 'dists', 'dists')
+    # toram の設置で、元の媒体を外した後も apt が引くファイルの一覧(Server)。
+    run(['python3', '-I', HERE / 'tools/ubuntu-merge/make-extra-list.py',
+         '--index', ROOT / 'dists/resolute/main/binary-amd64/Packages',
+         '--index', ROOT / 'dists/resolute/restricted/binary-amd64/Packages',
+         '--manifest', ROOT / 'casper/bootkit-meta/server/casper/ubuntu-server-minimal.manifest.full',
+         '--seed', 'efibootmgr', '--seed', 'grub-efi-amd64', '--seed', 'grub-efi-amd64-signed',
+         '--seed', 'shim-signed',
+         *(arg for name in ('Release', 'Release.gpg', 'main/binary-amd64/Packages',
+                            'main/binary-amd64/Packages.gz', 'restricted/binary-amd64/Packages',
+                            'restricted/binary-amd64/Packages.gz')
+           for arg in ('--dists-file', 'dists/resolute/' + name)),
+         '--root', ROOT, '--output', ROOT / 'casper/bootkit-chains/server.extra'], 'extra-list')
     # 同一パスのdebも公式のいずれかに由来することをmd5原本で検査。
     pool_md5 = {}
     for osname in ISO:

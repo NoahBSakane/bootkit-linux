@@ -187,12 +187,33 @@ RAM 選択複写が確保する余裕は含まない。選択複写の仕組み�
 出力は `build/` に置く。`assemble_stages.py` の入力先 `SRC` は現在
 `~/Downloads/ubuntu-merge-research-20261029` に固定されており、
 別の環境ではこの定数を入力先に合わせる。コマンドラインの入力先指定はない。
+入力先には、次の 3 つの ISO と、各配布元の `SHA256SUMS` を `SHA256SUMS.ubuntu`・
+`SHA256SUMS.lubuntu` の名前で置く(`assemble_stages.py` が `SHA256SUMS.*` を読み、
+ISO のハッシュを照合する)。
 
-| 入力 ISO | 照合済みの SHA-256 |
-| --- | --- |
-| `ubuntu-26.04.1-desktop-amd64.iso` | `601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f` |
-| `lubuntu-26.04.1-desktop-amd64.iso` | `a8038585420f2270845549c6f493e0ec98e68d4b2c49571cbe500a4b5fab3062` |
-| `ubuntu-26.04.1-live-server-amd64.iso` | `cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927` |
+| 入力 ISO | 大きさ(バイト) | 照合済みの SHA-256 | 入手先(2026-11-06 に応答と大きさを確認) |
+| --- | ---: | --- | --- |
+| `ubuntu-26.04.1-desktop-amd64.iso` | 6,482,409,472 | `601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f` | `https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-desktop-amd64.iso` |
+| `lubuntu-26.04.1-desktop-amd64.iso` | 3,927,552,000 | `a8038585420f2270845549c6f493e0ec98e68d4b2c49571cbe500a4b5fab3062` | `https://cdimage.ubuntu.com/lubuntu/releases/26.04.1/release/lubuntu-26.04.1-desktop-amd64.iso` |
+| `ubuntu-26.04.1-live-server-amd64.iso` | 2,927,861,760 | `cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927` | `https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso` |
+
+`SHA256SUMS` の入手先は、Ubuntu が `https://releases.ubuntu.com/26.04.1/SHA256SUMS`、
+Lubuntu が `https://cdimage.ubuntu.com/lubuntu/releases/26.04.1/release/SHA256SUMS`
+である(2026-11-06 に、手元の `SHA256SUMS.ubuntu`・`SHA256SUMS.lubuntu` と内容が一致
+することを確認した)。入力先を作り直すときは、次のように取得する。
+
+```sh
+mkdir -p ~/Downloads/ubuntu-merge-research-20261029 && cd ~/Downloads/ubuntu-merge-research-20261029
+curl -fLO https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-desktop-amd64.iso
+curl -fLO https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso
+curl -fLO https://cdimage.ubuntu.com/lubuntu/releases/26.04.1/release/lubuntu-26.04.1-desktop-amd64.iso
+curl -fL https://releases.ubuntu.com/26.04.1/SHA256SUMS -o SHA256SUMS.ubuntu
+curl -fL https://cdimage.ubuntu.com/lubuntu/releases/26.04.1/release/SHA256SUMS -o SHA256SUMS.lubuntu
+shasum -a 256 *.iso
+```
+
+公式 ISO の `/dists/resolute/Release.gpg` は ISO ごとに別の鍵で署名されているため、
+必ずこの 3 つの版(26.04.1)を使い、別の版や再生成された ISO で置き換えない。
 
 入力フォルダには公式の `SHA256SUMS.*` も置く。組み立て時に ISO 全体を照合する。
 根拠は `build/work/logs/r2b-inputs.json`。組み立て開始時は空き 32 GiB 以上が必要で、
@@ -664,12 +685,13 @@ SHA-256 が記録されておらず、最終ハッシュの ISO で同じ 6 条�
 
 Ubuntu の起動の鎖を 7 層に変えて ISO を組み立て直したため、最終 ISO
 (SHA-256 `6f08bc15…aebc`)で、R4a と同じ駆動(`ventoy/ramsel/verify-qemu.py --mode uefi-grub`、
-QEMU x86_64・q35・TCG・UEFI・ネットワークなし、serial と HMP)を 4 項目で再実行した。
+QEMU x86_64・q35・TCG・UEFI・ネットワークなし、serial と HMP)を 5 項目で再実行した。
 証拠は `build/evidence/relayer-r5/`、実行記録は `build/work/logs/r5-*.log`。
 
 | OS・項目 | RAM(MiB) | 証拠の接頭辞 | 結果 |
 | --- | ---: | --- | --- |
 | Ubuntu toram(項目 2) | 8,192 | `ubuntu-toram` | `/proc/cmdline` が `layerfs-path=common.dl.snap.ubuntu.std.live.kernel.squashfs toram`。GNOME のログイン画面。取り外し後、7 層の全体読出し成功(`READ_LAYER_COUNT=7`・`MEDIA_READ_RC=0`)、Python・`apt-get check`(`APT_RC=0`)成功 |
+| Server toram(項目 8) | 4,096 | `server-toram` | `/proc/cmdline` が `layerfs-path=common.server.std.live.generic.squashfs toram`。shell に到達。取り外し後、5 層の全体読出し成功(`READ_LAYER_COUNT=5`・`MEDIA_READ_RC=0`)、Python・`apt-get check`(`APT_RC=0`)成功。`/cdrom`(tmpfs)の使用量 1,518,575,616 バイトは、起動の鎖の合計 1,518,551,040 バイトより 24,576 バイト多く、R4a と同じ差 |
 | Ubuntu 通常(項目 0) | 8,192 | `ubuntu-normal` | `/proc/cmdline` が同じ leaf。GNOME のログイン画面。取り外し後は `READ_LAYER_COUNT=0`・`MEDIA_READ_RC=1`(元媒体への依存の対照) |
 | Server 通常(項目 6) | 4,096 | `server-normal` | `layerfs-path=common.server.std.live.generic.squashfs`。subiquity の言語選択画面。取り外し後は `READ_LAYER_COUNT=0`(対照) |
 | Lubuntu 通常(項目 3) | 4,096 | `lubuntu-normal2` | `layerfs-path=common.dl.snap.lubuntu.std.live.install.squashfs`。取り外し後は `READ_LAYER_COUNT=0`・`MEDIA_READ_RC=1`(対照) |
@@ -678,7 +700,7 @@ Ubuntu toram の `/cdrom`(tmpfs)の使用量は 4,815,441,920 バイトで、起
 4,815,417,344 バイトより 24,576 バイト多く、R4a の 3 OS と同じ差だった。
 Lubuntu を `--desktop lxqt` 付きで起動した初回は、R4a と同じく LXQt プロセス待ちで失敗
 した(`r5-lubuntu-normal.log`)。上表は R4a と同じ条件(`--desktop` なし)の再実行である。
-Lubuntu と Server の toram 項目は、今回は再実行していない(層と鎖は変えていないが、
+Lubuntu の toram 項目は、今回は再実行していない(層と鎖は変えていないが、
 最終 ISO での実行結果は未確認)。画面は黒または起動途中の場合があり、Lubuntu の
 live デスクトップへの到達は、この再確認では判定していない。
 

@@ -93,7 +93,7 @@ autoinstall(`source: {id: ubuntu-desktop}` / `ubuntu-desktop-minimal`)で、ネ�
    (`ubuntu-final/{normal,minimal}/installed-inspection.txt`)。
    失敗時の証拠は `ubuntu-desktop/fail1-apt-not-signed.txt` と `run2-progress.log`。
 
-最終 ISO での GRUB 起動(UEFI)は、Ubuntu の toram・通常、Server の通常、Lubuntu の通常の 4 項目を
+最終 ISO での GRUB 起動(UEFI)は、Ubuntu の toram・通常、Server の toram・通常、Lubuntu の通常の 5 項目を
 再確認し、期待どおりだった(`build/evidence/relayer-r5/`、詳細は
 [docs/ubuntu-merge-relayer.md](docs/ubuntu-merge-relayer.md) の「最終 ISO での GRUB 起動の再確認」)。
 

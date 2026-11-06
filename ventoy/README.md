@@ -1,5 +1,11 @@
 # Ventoy の USB 用の一式
 
+> 現行の統合 ISO は再層化版(`ubuntu-merge-26.04.1-amd64-relayer.iso`)で、USB には
+> `/ISO/live/ubuntu-merge-26.04.1-amd64-relayer.iso` に置く(Ventoy の起動モードは
+> 同じく **Boot in grub2 mode**)。再層化版の QEMU 上の Ventoy での起動確認は
+> [docs/ubuntu-merge-relayer.md](../docs/ubuntu-merge-relayer.md) の「QEMU 上の Ventoy での起動」
+> を参照する。以下の本文は旧設計(B2)の ISO を対象にした記述である。
+
 Ubuntu・Lubuntu・Ubuntu Server 26.04.1 amd64 は、共通層を共有する
 統合 ISO (B2) で使う。Ventoy は **1.1.18 以上**とし、ISO 選択後に
 **Boot in grub2 mode** を選ぶ。

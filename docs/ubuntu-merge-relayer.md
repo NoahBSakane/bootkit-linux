@@ -678,8 +678,8 @@ Ubuntu toram の画像もログイン画面で、live デスクトップへの�
 
 R4a は R4b の設定層修正前の起動記録として扱う。各起動ログには ISO 全体の
 SHA-256 が記録されておらず、最終ハッシュの ISO で同じ 6 条件を再実行した証拠は
-未確認である。また、旧 B2 の safe graphics・SeaBIOS・Ventoy の結果を、
-再層化版の検証済み項目へ移して数えない。
+未確認である(最終 ISO での再実行は、次の 2 節に記す)。また、旧 B2 の safe graphics・SeaBIOS・
+Ventoy の結果を、再層化版の検証済み項目へ移して数えない。
 
 ### 最終 ISO での GRUB 起動の再確認
 
@@ -703,6 +703,53 @@ Lubuntu を `--desktop lxqt` 付きで起動した初回は、R4a と同じく L
 Lubuntu の toram 項目は、今回は再実行していない(層と鎖は変えていないが、
 最終 ISO での実行結果は未確認)。画面は黒または起動途中の場合があり、Lubuntu の
 live デスクトップへの到達は、この再確認では判定していない。
+
+### QEMU 上の Ventoy での起動
+
+2026-11-06、最終 ISO(SHA-256 `6f08bc15…aebc`)を、QEMU 上の使い捨ての仮想 USB に置いた
+Ventoy 1.1.18 から起動した。**QEMU 上の確認であり、実機の USB・Secure Boot・
+safe graphics の確認ではない。** 本物の USB は使っていない。証拠は
+`build/evidence/relayer-r6-ventoy/`(98 ファイル。全ファイルの SHA-256 は同ディレクトリの
+`SHA256SUMS`、結果は `results.json`)。
+
+仮想 USB は、MBR・exFAT の第 1 パーティション(約 10 GiB)と 32 MiB の EFI 区画で、
+全体は 10 GiB のスパースファイルである。Alpine virt 3.22.7(aarch64、HVF)の VM で、
+配布物の `Ventoy2Disk.sh -I` を実行して作った(終了値 0)。busybox の `dd` が
+EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する接頭部を確認したうえで、
+配布物の `ventoy.disk.img.xz` から末尾を補い、32 MiB 全体が配布物と一致することを確かめた
+(`efi-completion.txt`・`partition-check.txt`)。最終 ISO は第 1 パーティションの
+`/ISO/live/ubuntu-merge-26.04.1-amd64-relayer.iso` に 1 回だけコピーし、大きさと SHA-256 が
+元と一致することを `tools/ubuntu-merge/check-ventoy-image.py` で確かめた。
+`ventoy.json` は置いていない。
+
+起動は、`ventoy/ramsel/verify-qemu.py --mode ventoy-uefi --ventoy-mode grub2`
+(BIOS は `--mode ventoy-bios --machine pc`)で行い、Ventoy のメニューで
+「Boot in grub2 mode」を選んだ。仮想 USB は `device_del ventoyusb` で取り外し、
+キャッシュを落として各層を全体読み出しした。
+
+| 項目 | RAM(MiB) | 起動完了 | 取り外し後 | `/cdrom`(tmpfs)使用量(バイト) |
+| --- | ---: | --- | --- | ---: |
+| Server toram(UEFI、項目 8) | 4,096 | subiquity から shell | `READ_LAYER_COUNT=5`・`MEDIA_READ_RC=0`・Python 成功・`APT_RC=0` | 1,518,575,616(期待と一致) |
+| Ubuntu toram(UEFI、項目 2) | 8,192 | GDM のログイン画面 | `READ_LAYER_COUNT=7`・`MEDIA_READ_RC=0`・Python 成功・`APT_RC=0` | 4,815,441,920(R5 の記録と同じ) |
+| Lubuntu toram(UEFI、項目 5) | 6,144 | LXQt に到達 | `READ_LAYER_COUNT=7`・`MEDIA_READ_RC=0`・Python 成功・`APT_RC=0` | 3,762,188,288(期待と一致) |
+| Server toram(BIOS) | 4,096 | subiquity から shell | `READ_LAYER_COUNT=5`・`MEDIA_READ_RC=0`・Python 成功・`APT_RC=0` | 1,518,575,616 |
+| Server 通常項目の対照(UEFI、項目 6) | 4,096 | shell | `READ_LAYER_COUNT=0`・`MEDIA_READ_RC=1`・`APT_RC=126`(元媒体への依存) | `/cdrom` は `/dev/mapper/ventoy` の iso9660 |
+
+各実行で、Ventoy の ISO メニューと、最終 ISO の GRUB メニューの 9 項目
+(3 OS × 通常・safe graphics・copy to RAM)が serial に表示された。`/proc/cmdline` には
+`rdinit=/vtoy/vtoy` があり、Ventoy 経由の起動であることを示す。Lubuntu は
+「Try Lubuntu」の選択を HMP の `sendkey` で手動で行った。Ubuntu の画面は GDM の
+「Live session user」のログイン画面で、live デスクトップへのログイン完了は確認していない。
+
+観察した事項(原因はいずれも未検証):
+
+- Ubuntu toram の 1 回目は、systemd の起動直後から 10 分以上 serial が更新されず停止した
+  (`attempt1-*`)。同じコマンドの再実行は完走し、上表は 2 回目の結果である。
+- Server では、取り外し直後(guest 時刻 299.6〜316.2 秒)に、元の mapper の
+  `dm-0`・`dm-1` で `Buffer I/O error` が UEFI・BIOS とも 6 件出た。層の全体読み出し・Python・
+  APT は成功している。BIOS では未使用の仮想フロッピー `fd0` の読み出しエラーも出た。
+  Lubuntu と Ubuntu のログには同じエラーは無い。
+- 仮想 USB は検証後に削除した(再作成は約 2 分。`build/work/ventoy-install/alpine-driver.py`)。
 
 ## 既知の制約と未検証
 
@@ -734,8 +781,10 @@ live デスクトップへの到達は、この再確認では判定していな
   Minimal や実機では起こらないとは判断できない。
 - Calamares が Install Now 直後に終了した例が Minimal で 1 回ある。
   再起動して設置を完了したが、原因は未検証。
-- R4a の live GUI 到達には上記の未確認がある。safe graphics、SeaBIOS、実機、
-  Ventoy、Secure Boot 有効時の起動と設置は、この再層化版では未確認。
+- R4a の live GUI 到達には上記の未確認がある。safe graphics、実機、Secure Boot 有効時の
+  起動と設置は、この再層化版では未確認。Ventoy は QEMU 上の確認までで、実機の USB は未確認
+  (「QEMU 上の Ventoy での起動」)。Ventoy 経由の BIOS 起動は Server だけを確かめ、
+  Lubuntu・Ubuntu は未確認。
 - 言語・enhanced-secureboot の派生層は収録せず、明示した主要層の鎖だけを使う。
   日本語 GUI 表示・入力や言語別の設置経路は未確認。派生層の意味と旧版での調査は
   [旧設計の「言語・enhanced-secureboot 派生層」](ubuntu-merge.md#言語enhanced-secureboot-派生層)

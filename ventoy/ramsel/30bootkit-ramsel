@@ -7,6 +7,9 @@
 # 動き (子プロセスで実行され、mountroot 本体への伝達はファイルで行う):
 #   1. 媒体(ISO)を探して読み取り専用で臨時マウントする。
 #   2. casper/bootkit-chains/<os>.list の層だけを /bootkit-ram (tmpfs) へ写す。
+#      casper/bootkit-chains/<os>.extra があれば、その各行(媒体内の dists/ か
+#      pool/ 以下の相対パス)も同じ相対パスで写す。設置プログラムが元の媒体を
+#      取り外した後も /cdrom の apt(file:/cdrom)で引けるようにするため。
 #   3. /run/bootkit-ramsel/env に LIVEMEDIA=/bootkit-ram と TORAM の解除を書く。
 #      ORDER がこれを mountroot のシェルへ読み戻すため、casper 本体は
 #      その tmpfs を livefs_root として使い、copy_live_to の二重複写は起きない。
@@ -90,6 +93,18 @@ valid_layer_name() {
         ;;
     esac
     return 1
+}
+
+valid_extra_path() {
+    # dists/ か pool/ 以下の相対パスだけ。.. ・先頭の / ・// ・空白は不可。
+    case "$1" in
+    dists/* | pool/*) ;;
+    *) return 1 ;;
+    esac
+    case "$1" in
+    *[!A-Za-z0-9_.+~:/-]* | *..* | *//* | */) return 1 ;;
+    esac
+    return 0
 }
 
 mem_available_kb() {
@@ -221,6 +236,29 @@ main() {
         umount "$scan_mnt" 2>/dev/null || true
         fail "empty chain: $list"
     fi
+    extra_list="$scan_mnt/casper/bootkit-chains/$os.extra"
+    tmp_extra="$RUN_DIR/extra.list"
+    : >"$tmp_extra"
+    if [ -f "$extra_list" ]; then
+        # shellcheck disable=SC2162
+        while IFS= read -r line || [ -n "$line" ]; do
+            line="$(printf '%s' "$line" | tr -d '\r')"
+            case "$line" in
+            '' | \#*) continue ;;
+            esac
+            if ! valid_extra_path "$line"; then
+                umount "$scan_mnt" 2>/dev/null || true
+                fail "invalid extra path: $line"
+            fi
+            if [ ! -f "$scan_mnt/$line" ]; then
+                umount "$scan_mnt" 2>/dev/null || true
+                fail "extra file missing from media: $line"
+            fi
+            printf '%s\n' "$line" >>"$tmp_extra"
+            size="$(file_bytes "$scan_mnt/$line")"
+            total=$((total + size))
+        done <"$extra_list"
+    fi
     need_kb=$((total / 1024 + SLACK_KB))
     avail_kb="$(mem_available_kb 2>/dev/null || printf '0\n')"
     log "chain total: $total bytes, need: ${need_kb} KiB, available: ${avail_kb} KiB"
@@ -262,6 +300,22 @@ main() {
             fail "copy mismatch (size): $layer"
         fi
     done <"$tmp_list"
+    while IFS= read -r extra; do
+        [ -n "$extra" ] || continue
+        extra_dir="${extra%/*}"
+        if ! mkdir -p "$TARGET/$extra_dir" || ! cp -a "$scan_mnt/$extra" "$TARGET/$extra"; then
+            umount "$TARGET" 2>/dev/null || true
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "copy failed: $extra"
+        fi
+        src_size="$(file_bytes "$scan_mnt/$extra")"
+        dst_size="$(file_bytes "$TARGET/$extra")"
+        if [ "$src_size" != "$dst_size" ]; then
+            umount "$TARGET" 2>/dev/null || true
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "copy mismatch (size): $extra"
+        fi
+    done <"$tmp_extra"
     if [ -d "$scan_mnt/.disk" ]; then
         cp -a "$scan_mnt/.disk" "$TARGET/.disk" 2>/dev/null || true
     fi

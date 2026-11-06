@@ -9,6 +9,11 @@
 `pool/`・他の OS の層・他の `initrd.<os>`・連鎖に無い層は載らない。
 複写後の層の参照先は RAM 内だけで、元媒体のマウントは残らないため、
 起動後に USB を抜ける。
+`casper/bootkit-chains/<os>.extra` があれば、その各行(媒体内の `dists/` か `pool/` 以下の
+相対パス)も、同じ相対パスで tmpfs へ写す。設置プログラムが元の媒体を外した後も、
+`/cdrom` の apt(`file:/cdrom`)で GRUB・shim などを引けるようにするためで、サイズの見積もりと
+照合にも含める。一覧に無い `pool/` は載せない。一覧は
+`tools/ubuntu-merge/make-extra-list.py` が、設置先の manifest に無いパッケージとその依存の閉包から作る。
 複写に失敗したとき (RAM 不足・媒体が見えない・層の欠落・写し誤り) は、
 理由を出して停止する (`panic` 相当)。黙って媒体参照のまま続けない。
 `toram` が無いとき、または `bootkit.os` が無いときは何もしない

@@ -667,6 +667,13 @@ Ubuntu の BIOS Normal は上の表の行に記した。
   再起動(autoinstall の最初からの再実行)、Ubuntu Minimal では autoinstall から `network:` の
   1 行を外すこと(subiquity が `netplan apply` を飛ばす)。Ubuntu Minimal の合格は、
   `network:` を外した条件に限る。
+- `netplan apply` の所要時間の実測(Server の live、QEMU 1 台、`-smp 4 -m 4096`、`-net none`):
+  ホストが空きで 7.75・7.84・7.78 秒、ホストに CPU 負荷(`yes` を 8 個)をかけると 19.23・19.04・
+  18.99 秒(約 2.45 倍)。QEMU 1 台・負荷なしの Server Minimal の autoinstall は完走し、設置中の
+  `netplan apply` は 9.55 秒だった。時間切れ(25 秒)には、負荷をかけても届かなかった。
+  負荷で遅くなることは確認したが、25 秒超の再現はしておらず、過去の失敗が QEMU 複数台の並走時
+  だったことと合わせた推測にとどまる。`/etc/netplan/00-installer-config.yaml` が 0644 で
+  netplan が警告を出すが、時間切れとの関係は未検証。証拠は `build/evidence/relayer-r6-netplan/`。
 - Lubuntu は serial が使えず、Calamares の 43/43 は直接確認していない。「All done.」ページの
   到達と設置後ディスクの内容で成功と判断した。
 - 証拠は `build/evidence/relayer-r6-server/`・`relayer-r6-lubuntu/`・
@@ -809,15 +816,23 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
 - Ubuntu の live 自身の apt は、`/cdrom` の Release(Server の署名)を、live 側の
   `cdrom.sources`(Desktop の鍵だけを信頼)で検証できず、「not signed」と表示する。
   確認した範囲では設置の成否に影響していない。
-- toram 項目からの設置は完走していない(Server で試行)。複写後に `eject -f cd0` で媒体を
-  取り外すと、autoinstall の apt が `/cdrom/dists/resolute/Release` と、GRUB・shim などの
-  deb(`/cdrom/pool/…`)を要求して失敗する。toram の複写対象は層だけで、`/dists` と `/pool` は
-  含まないため。`/dists`(約 319 KB)を足すと apt の更新は通ったが、続く GRUB・shim の
-  パッケージ設置が `/pool` の不在で失敗した。`/pool` 全体は約 2.4 GB で、Server の RAM 4 GiB の
-  tmpfs には入らない。複写対象に `/dists` と設置に要る deb を足す案は、実施・検証していない。
-  媒体取り外し後の全層読出し・Python・APT の確認は、設置プログラムが追加データを要求する
-  経路の検証を含まない。証拠は `build/evidence/relayer-r6-server/toram/`
+- toram 項目からの設置は、最終 ISO では完走しない(Server で試行)。複写後に `eject -f cd0` で
+  媒体を取り外すと、autoinstall の apt が `/cdrom/dists/resolute/Release` と、GRUB・shim などの
+  deb(`/cdrom/pool/…`)を要求して失敗する。toram の複写対象が層だけで、`/dists` と `/pool` を
+  含まないため。証拠は `build/evidence/relayer-r6-server/toram/`
   (`toram-diag7.txt`・`toram-diag15.txt` など)。
+  対策として、複写台本が `casper/bootkit-chains/<os>.extra` の一覧のファイルも RAM へ写す
+  変更を加えた(`ventoy/ramsel/30bootkit-ramsel`、一覧は `tools/ubuntu-merge/make-extra-list.py`
+  が設置先の manifest との差と依存の閉包から作る。Server は `dists` の索引 6 ファイルと deb 7 個、
+  合計約 4.9 MB。`pool` 全体の約 2.4 GB は RAM に入らない)。最終 ISO の複製に新しい追加 cpio
+  と `server.extra` を足した試験用 ISO で、Server Normal の toram 設置は完走した
+  (QEMU 1 台、4,096 MiB、媒体は複写完了後に取り外し。poweroff まで 977 秒、設置後の単独起動で
+  ログイン、`dpkg --audit` 空、`apt-get check` 終了 0、パッケージ 713〔Normal の通常設置と同数〕、
+  `grub-efi-amd64-signed`・`grub-efi-amd64-bin`・`grub-efi-amd64-unsigned` あり。複写量は
+  層の合計に 4,925,042 バイトを足した 1,523,476,082)。証拠は
+  `build/evidence/relayer-r6-extra/`。この結果は試験用 ISO のもので、最終 ISO・USB の ISO には
+  未反映。Server Minimal・Ubuntu・Lubuntu の toram 設置は未実施。媒体取り外し後の全層読出し・
+  Python・APT の確認は、設置プログラムが追加データを要求する経路の検証を含まない。
 - Lubuntu Normal の設置後ディスクを通常の GRUB 項目(`quiet splash`)で起動した
   3 回のうち 2 回で、約 4 分後に `KERNEL PANIC! Fatal exception in interrupt`
   が出た。3 回目は SDDM に到達し、別途 `quiet splash` を外して serial を足した

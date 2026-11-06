@@ -93,6 +93,14 @@ cat >"$MEDIA/casper/bootkit-chains/test.list" <<'LIST'
 test.base.squashfs
 test.base.plus.squashfs
 LIST
+mkdir -p "$MEDIA/dists/resolute" "$MEDIA/pool/main/e/efibootmgr"
+printf 'Release' >"$MEDIA/dists/resolute/Release"
+printf 'deb' >"$MEDIA/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb"
+cat >"$MEDIA/casper/bootkit-chains/test.extra" <<'LIST'
+# apt が元の媒体なしで引くファイル
+dists/resolute/Release
+pool/main/e/efibootmgr/efibootmgr_1_amd64.deb
+LIST
 
 env_for() {
     # $1: cmdline、$2: meminfo の MemAvailable 行
@@ -132,7 +140,10 @@ cmp -s "$MEDIA/casper/test.base.squashfs" "$WORK/target-good/casper/test.base.sq
     fail '写し誤り'
 contains "$WORK/run-good/env" 'LIVEMEDIA='"$WORK/target-good"
 contains "$WORK/run-good/env" 'unset TORAM'
-ok '成功 (選択複写と env)'
+[ -f "$WORK/target-good/dists/resolute/Release" ] || fail 'extra (dists) が写っていない'
+cmp -s "$MEDIA/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb" \
+    "$WORK/target-good/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb" || fail 'extra (pool) の写し誤り'
+ok '成功 (選択複写と env と extra)'
 
 # toram が無い: 何もしない。
 env_for 'BOOT_IMAGE=x bootkit.os=test --- quiet' 'MemAvailable:    8000000 kB'
@@ -166,6 +177,21 @@ env_for 'BOOT_IMAGE=x toram bootkit.os=broken --- quiet' 'MemAvailable:    80000
 [ "$(run_script broken)" = 1 ] || fail '欠落層で止まらない'
 grep -Fq 'layer missing from media' "$WORK/run-broken/failed" || fail '理由が違う'
 ok '欠落層は失敗する'
+
+# extra に無いファイル・不正な相対パスは失敗する。
+printf 'test.base.squashfs\n' >"$MEDIA/casper/bootkit-chains/xmiss.list"
+printf 'pool/main/nope.deb\n' >"$MEDIA/casper/bootkit-chains/xmiss.extra"
+env_for 'BOOT_IMAGE=x toram bootkit.os=xmiss --- quiet' 'MemAvailable:    8000000 kB'
+[ "$(run_script xmiss)" = 1 ] || fail 'extra の欠落で止まらない'
+grep -Fq 'extra file missing' "$WORK/run-xmiss/failed" || fail 'extra 欠落の理由が違う'
+for bad in '../etc/passwd' '/etc/passwd' 'pool/../x' 'casper/x' 'pool//x' 'pool/a b'; do
+    printf 'test.base.squashfs\n' >"$MEDIA/casper/bootkit-chains/xbad.list"
+    printf '%s\n' "$bad" >"$MEDIA/casper/bootkit-chains/xbad.extra"
+    env_for 'BOOT_IMAGE=x toram bootkit.os=xbad --- quiet' 'MemAvailable:    8000000 kB'
+    [ "$(run_script xbad)" = 1 ] || fail "不正な extra で止まらない: $bad"
+    grep -Fq 'invalid extra path' "$WORK/run-xbad/failed" || fail "不正な extra の理由が違う: $bad"
+done
+ok 'extra の欠落・不正パスは失敗する'
 
 # 想定外の I/O 失敗でも failed が残り、親が panic できる。
 cat >"$STUBS/stat" <<'STUB'

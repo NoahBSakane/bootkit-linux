@@ -46,6 +46,17 @@ printf '%s\n' dists/r/Release pool/main/a/top_1_amd64.deb pool/main/b/dep_1_amd6
 cmp -s "$WORK/out" "$WORK/expected" || fail '一覧が期待と違う'
 ok '設置先に無いものと、依存(Recommends を含む)の閉包だけを載せる'
 
+mkdir -p "$WORK/media/casper"
+printf 'kernel' >"$WORK/media/casper/vmlinuz"
+printf 'layer' >"$WORK/media/casper/test.apt.squashfs"
+python3 -I "$TOOL" --index "$WORK/Packages" --manifest "$WORK/manifest" --seed top \
+    --literal casper/vmlinuz --literal casper/test.apt.squashfs \
+    --dists-file dists/r/Release --root "$WORK/media" --output "$WORK/with-casper" >/dev/null ||
+    fail 'カーネルと層を含む一覧の生成に失敗'
+{ printf '%s\n' casper/vmlinuz casper/test.apt.squashfs; cat "$WORK/expected"; } >"$WORK/expected-casper"
+cmp -s "$WORK/with-casper" "$WORK/expected-casper" || fail 'カーネルと層を含む一覧が期待と違う'
+ok 'kerncopy 用 vmlinuz と設置用の層を literal で含める'
+
 # 媒体に無いファイルがあれば失敗する。
 rm "$WORK/media/pool/main/b/dep_1_amd64.deb"
 if python3 -I "$TOOL" --index "$WORK/Packages" --manifest "$WORK/manifest" --seed top \

@@ -213,13 +213,13 @@ def finish(hashes):
     extract('server', '/dists', ROOT / 'dists', 'dists')
     # toram の設置で、元の媒体を外した後も apt が引くファイルの一覧(OSごと)。
     # 設置先の層(manifest.full)に無い GRUB・shim などとその依存、dists の索引、
-    # Ubuntu は設置用の apt 層(casper/ 直下)も入れる。
+    # Ubuntu は設置用の apt 層、Lubuntu は Calamares の kerncopy 用 vmlinuz も入れる。
     extra_sources = {
         'server': ('server/casper/ubuntu-server-minimal.manifest.full', ()),
         'ubuntu': ('desktop/casper/minimal.manifest.full',
                    ('casper/common.dl.snap.ubuntu.std.apt.squashfs',
                     'casper/common.dl.snap.ubuntu.apt.squashfs')),
-        'lubuntu': ('lubuntu/casper/minimal.manifest.full', ()),
+        'lubuntu': ('lubuntu/casper/minimal.manifest.full', ('casper/vmlinuz',)),
     }
     for osname, (manifest, literals) in extra_sources.items():
         run(['python3', '-I', HERE / 'tools/ubuntu-merge/make-extra-list.py',

@@ -8,13 +8,14 @@
 #   1. 媒体(ISO)を探して読み取り専用で臨時マウントする。
 #   2. casper/bootkit-chains/<os>.list の層だけを /bootkit-ram (tmpfs) へ写す。
 #      casper/bootkit-chains/<os>.extra があれば、その各行(媒体内の dists/ か
-#      pool/ 以下の相対パス、または casper/ 直下の層)も同じ相対パスで写す。
+#      pool/ 以下の相対パス、casper/ 直下の層、vmlinuz)も同じ相対パスで写す。
 #      設置プログラムが元の媒体を取り外した後も、設置元の層や /cdrom の apt
 #      (file:/cdrom)を引けるようにするため。
 #   3. /run/bootkit-ramsel/env に LIVEMEDIA=/bootkit-ram と TORAM の解除を書く。
 #      ORDER がこれを mountroot のシェルへ読み戻すため、casper 本体は
 #      その tmpfs を livefs_root として使い、copy_live_to の二重複写は起きない。
 #   4. 臨時マウントを外す。元の媒体は /cdrom 等へ一切マウントしない。
+#      Lubuntu は複写後の tmpfs を読み取り専用にしてから casper へ渡す。
 # 複写の失敗時(RAM 不足・媒体なし・層の欠落・写し誤り)は理由を
 # /run/bootkit-ramsel/failed に書き、ORDER が mountroot 側で panic する。
 # 黙って媒体参照のまま続けることはない。
@@ -97,10 +98,11 @@ valid_layer_name() {
 }
 
 valid_extra_path() {
-    # dists/ か pool/ 以下の相対パス、または casper/ 直下の層(<層名>.squashfs)だけ。
+    # dists/ か pool/ 以下、casper/ 直下の層、Calamares の kerncopy 用 vmlinuz だけ。
     # .. ・先頭の / ・// ・空白は不可。
     case "$1" in
     dists/* | pool/*) ;;
+    casper/vmlinuz) ;;
     casper/*)
         valid_layer_name "${1#casper/}" || return 1
         ;;
@@ -326,6 +328,19 @@ main() {
     fi
     if [ -f "$scan_mnt/casper/install-sources.yaml" ]; then
         cp -a "$scan_mnt/casper/install-sources.yaml" "$TARGET/casper/install-sources.yaml" 2>/dev/null || true
+    fi
+
+    if [ "$os" = lubuntu ]; then
+        # casper は層の loop を作って ro で mount する一方、Calamares の
+        # unpackfs は同じファイルに -o loop だけを指定する。rw の tmpfs では
+        # 既存の ro squashfs と要求が食い違う。元の ISO と同じ ro の媒体に
+        # 揃え、loop の読み取り専用へのフォールバックを働かせる。
+        # chmod だけでは root の書き込み open を防げないため使わない。
+        if ! mount -o remount,ro "$TARGET"; then
+            umount "$TARGET" 2>/dev/null || true
+            umount "$scan_mnt" 2>/dev/null || true
+            fail "cannot remount RAM media read-only; will not continue from media"
+        fi
     fi
 
     umount "$scan_mnt" 2>/dev/null || fail "cannot unmount media ($media); will not continue from media"

@@ -14,6 +14,11 @@
 `/cdrom` の apt(`file:/cdrom`)で GRUB・shim などを引けるようにするためで、サイズの見積もりと
 照合にも含める。一覧に無い `pool/` は載せない。一覧は
 `tools/ubuntu-merge/make-extra-list.py` が、設置先の manifest に無いパッケージとその依存の閉包から作る。
+Lubuntu の toram では、全複写の後に RAM 上の媒体(tmpfs)を読み取り専用で
+remount(マウントし直し)してから casper へ渡す。Calamares の unpackfs が
+既存の読み取り専用 loop と衝突して rc=32 になるのを避けるためである。
+remount に失敗したときは複写の失敗と同じく停止する。
+Server・Ubuntu の toram と通常起動の処理は変えていない。
 複写に失敗したとき (RAM 不足・媒体が見えない・層の欠落・写し誤り) は、
 理由を出して停止する (`panic` 相当)。黙って媒体参照のまま続けない。
 `toram` が無いとき、または `bootkit.os` が無いときは何もしない

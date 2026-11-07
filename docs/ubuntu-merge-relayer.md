@@ -8,26 +8,28 @@
 Server・Lubuntu・Ubuntu Desktop は、Normal・Minimal の計 6 通りでオフライン設置と
 設置後の単独起動を確認した。Ubuntu Desktop は autoinstall での確認で、画面付きの
 対話での設置は未検証である(「既知の制約と未検証」を参照)。
+toram からの設置も、3 OS・各 Normal/Minimal の計 6 通りで完走を確認した
+(「toram からの設置」を参照)。
 
-確認日は 2026-11-06。冒頭の ISO の値、後述の実測 LBA、静的検証結果は、
-Ubuntu 用 APT 設定層 2 本と live kernel 設定層 1 本を加えて組み立て直した
-最終 ISO のもの。以下の数値は圧縮後のファイルサイズをバイト単位で示す。
-非圧縮の内容量とは区別する。
+冒頭の ISO の値は最終 ISO のもの。後述の実測 LBA と静的検証結果は、
+2026-11-06 に確認した旧世代(SHA-256 `6f08bc15…aebc`。Ubuntu 用 APT 設定層
+2 本と live kernel 設定層 1 本を加えて組み立て直した世代)のもので、
+新しい最終 ISO では未確認である。以下の数値は圧縮後のファイルサイズを
+バイト単位で示す。非圧縮の内容量とは区別する。
 
 | 項目 | 値 |
 | --- | --- |
 | ISO | `build/ubuntu-merge-26.04.1-amd64-relayer.iso` |
-| 大きさ | 8,847,755,264 バイト、8.240114 GiB |
-| SHA-256 | `6f08bc1564c0d659af0826453740ae84cd87cebbd5f7ac4aeec2fc28aa6caebc` |
+| 大きさ | 8,854,044,672 バイト、8.245972 GiB |
+| SHA-256 | `f47ebed50a296ffcb3eb4c6f36e8efa997eaa6bc46fe5fc5f5d02fe53d4510a2` |
 | 設置用の層 | 9 本、合計 5,269,733,376 バイト |
 | 起動専用の追加層 | 公式 live・installer 4 本、Lubuntu の設定層 1 本、Ubuntu の live kernel 設定層 1 本 |
 | 設置専用の追加層 | Ubuntu の APT 設定層 2 本(各 4,096 バイト) |
 | 収録する層の合計 | 17 本 |
 
-ISO のサイズと SHA-256 は実物で再確認した。Ubuntu 用の設定層 3 本を加える前の ISO は
-8,847,738,880 バイト、SHA-256 `fe3bcfbece3e262bf3fea9720d3f47e44fe183afe0a808be7f6afec911342f14`
-(R2b 報告の `78e19917ceb0373f1037f9b937149fce612bfb82d2020f0f304a6417b61cad35` は、
-さらに Lubuntu のブートローダー準備を直す前の値)で、上表はそれより 16,384 バイト大きい。
+ISO のサイズと SHA-256 は実物で再確認した。直前世代の最終 ISO は
+8,849,588,224 バイト、SHA-256 `c0c318948a0213261cbe23785444f2f9dc52d935d7e03f8a27b20656a327c1cb`
+で、上表はそれより 4,456,448 バイト大きい。
 生成時刻などを固定する仕組みはなく、再生成した ISO 全体がこのハッシュになることを
 保証する手順ではない。
 
@@ -427,7 +429,8 @@ LBA は ISO 内の論理ブロックの番号で、ここでは 1 ブロック 2
 優先度 100、それ以外を 0 として、
 大きな層より手前へ置く。大きな層の最小 LBA の計算から設定層を除き、
 優先ファイルの占有領域がすべてその前に収まることを検査する。
-以下は最終 ISO の実測配置である。
+以下は旧世代の最終 ISO(SHA-256 `6f08bc15…aebc`)の実測配置で、
+新しい最終 ISO の実測配置は未確認である。
 最初の大きな層 `common.squashfs` は LBA 165,673 から始まり、優先ファイル
 795 件の占有領域はすべてその前に収まる。実物と `r2b-lba.json` を照合した。
 
@@ -452,7 +455,9 @@ BIOS と UEFI の El Torito 起動イメージ、GRUB2 MBR を持つ。GRUB2 用
 `--grub2-mbr`・`--grub2-boot-info` で位置値を補正し、boot-info-table の
 位置・長さ・チェックサムも検査する。実物には GPT は無い。
 `fix-pvd.py` はボリュームサイズの整合を調べるが、今回の新規生成物は補正不要だった。
-PVD(主ボリューム記述子)のサイズ 4,320,193 ブロックは、実ファイルサイズと一致する。
+PVD(主ボリューム記述子)のサイズ 4,320,193 ブロックは、旧世代の最終 ISO
+(SHA-256 `6f08bc15…aebc`)の値で、当時の実ファイルサイズと一致した。
+新しい最終 ISO の値は未確認である。
 
 ## 設置の仕組み
 
@@ -560,7 +565,8 @@ SHA-256・デバイス番号。時刻とルートエントリは同一性の合�
 
 ISO の静的検証は全 17 層の再抽出ハッシュ、公式 live 4 層のバイト一致、
 カタログ 4 項目、ドット規則と鎖、pool・dists、GRUB、LBA、起動イメージの位置値、
-PVD の整合が合格。最終 ISO の値は `build/work/logs/r2b-verification.json` にある。
+PVD の整合が合格。旧世代の最終 ISO(SHA-256 `6f08bc15…aebc`)の値は
+`build/work/logs/r2b-verification.json` にある。新しい最終 ISO の静的検証は未確認である。
 R4b 修正後の回帰試験は `r4b-space-test.log` の末尾で全試験成功・`exit=0`。
 先行する `r4b-make-test.log` は case-sensitive 領域を渡さず失敗した記録なので、
 成功の証拠とは区別する。
@@ -742,8 +748,11 @@ Ubuntu toram の `/cdrom`(tmpfs)の使用量は 4,815,441,920 バイトで、起
 4,815,417,344 バイトより 24,576 バイト多く、R4a の 3 OS と同じ差だった。
 Lubuntu を `--desktop lxqt` 付きで起動した初回は、R4a と同じく LXQt プロセス待ちで失敗
 した(`r5-lubuntu-normal.log`)。上表は R4a と同じ条件(`--desktop` なし)の再実行である。
-Lubuntu の toram 項目は、今回は再実行していない(層と鎖は変えていないが、
-最終 ISO での実行結果は未確認)。画面は黒または起動途中の場合があり、Lubuntu の
+Lubuntu の toram 項目は、R5 では再実行していない(層と鎖は変えていない)。
+R5 時点では最終 ISO での実行結果は未確認だったが、後の「QEMU 上の Ventoy での起動」で
+同じ最終 ISO(SHA-256 `6f08bc15…aebc`)の Lubuntu toram の起動を確認し、
+さらに「toram からの設置」で新しい最終 ISO での Lubuntu の toram 設置を確認した。
+画面は黒または起動途中の場合があり、Lubuntu の
 live デスクトップへの到達は、この再確認では判定していない。
 
 ### QEMU 上の Ventoy での起動
@@ -793,6 +802,51 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
   Lubuntu と Ubuntu のログには同じエラーは無い。
 - 仮想 USB は検証後に削除した(再作成は約 2 分。`build/work/ventoy-install/alpine-driver.py`)。
 
+### toram からの設置
+
+最終 ISO(SHA-256 `f47ebed5…10a2`)の toram からの設置は、3 OS・各 Normal/Minimal の
+計 6 通りとも完走する。条件は、ISO を Ventoy を介さず CD-ROM として直接接続し、
+設置を通すための回避(mount の差し替えやファイルの手動複写)をせず、QEMU/TCG、
+`-net none`、UEFI で行うことである。複写の完了後に元の媒体を取り外し、
+設置の完了まで戻さない。
+証拠は `build/evidence/relayer-r6-toram/` の `server-cand4`・`ubuntu-cand4`・
+`lubuntu-cand4`。
+
+直前世代の最終 ISO(SHA-256 `c0c31894…c1cb`)からの変更は次の 3 点である。
+
+- 3 OS に、toram の設置で元の媒体を外した後も apt が引くファイルの一覧
+  (`casper/bootkit-chains/<os>.extra`: dists の索引と、設置時に入れる GRUB・shim などの
+  deb とその依存。Ubuntu の一覧は設置用の apt 層、Lubuntu の一覧は `casper/vmlinuz` も含む)
+  を足し、toram の複写がそれらも RAM へ写す。
+- Lubuntu の toram だけ、複写の後に RAM 上の媒体(tmpfs)を読み取り専用で
+  remount(マウントし直し)してから casper へ渡す。Calamares の unpackfs が
+  既存の読み取り専用 loop と衝突して rc=32 になるのを避けるためである。
+- Server・Ubuntu の toram と通常起動の動作は変えていない。
+
+| OS(構成) | toram の入口 | RAM(MiB) | パッケージ数(ii) | 設置の所要 |
+| --- | --- | ---: | ---: | --- |
+| Server Normal | GRUB 項目 8 | 4,096 | 713 | 約 27 分 |
+| Server Minimal | GRUB 項目 8 | 4,096 | 508 | 約 36 分 |
+| Ubuntu Normal(UEFI) | カーネル直接指定(GRUB 項目 2 と同じ cmdline、initrd は `initrd.ubuntu` + `bootkit-ramsel.cpio.gz`) | 8,192 | 1,769 | 約 81 分(VM 起動から電源断) |
+| Ubuntu Minimal(UEFI) | 同上 | 8,192 | 1,541 | 約 42 分 |
+| Lubuntu Normal | GRUB 項目 5 | 6,144 | 1,972 | 約 43 分(ゲストのログ上) |
+| Lubuntu Minimal | GRUB 項目 5 | 6,144 | 1,658 | 約 20 分(ゲストのログ上) |
+
+いずれも設置後ディスクだけで単独起動し、`dpkg --audit` が空、`apt-get check` が
+終了 0、casper・subiquity・calamares などの不在、`/pool`・`/dists` の不在を確認した。
+
+観察した事項:
+
+- Server は設置後の単独起動で systemd が degraded である(`-net none` での
+  networkd-wait-online・cloud-init の失敗。以前の証拠にもある)。
+- Ubuntu・Lubuntu の電源断時に `loop busy`・cdrom の umount の警告が出る。
+  設置後の検査は合格している。
+- Lubuntu の Calamares は Install Now 直後に落ちる既知の不具合がある
+  (toram とは無関係の可能性。今回は起きなかった)。
+- Ubuntu Desktop の toram を GRUB メニュー経由の live で試験していない
+  (カーネル直接指定で、GRUB 項目 2 の cmdline と initrd の連結を再現した)。
+- BIOS 起動の toram は、今回は試験していない。
+
 ## 既知の制約と未検証
 
 - Ubuntu Desktop の設置は autoinstall での確認である。画面付きの対話の設置
@@ -801,7 +855,7 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
 - Ubuntu Desktop の設置は、OVMF の UEFI と、kernel・initrd・`layerfs-path` を直接指定した
   live 起動で行った。GRUB メニューの Ubuntu 項目から起動した live での設置は未実施。
   BIOS 起動の live(SeaBIOS、kernel・initrd・`layerfs-path` を直接指定)での設置は、
-  最終 ISO で Normal が通った(上の表。証拠は `build/evidence/relayer-r6-ubuntu-bios/normal/`)。
+  旧世代の最終 ISO(SHA-256 `6f08bc15…aebc`)で Normal が通った(上の表。証拠は `build/evidence/relayer-r6-ubuntu-bios/normal/`)。
   Minimal は `network:` を外した autoinstall で通った(「最終 ISO での設置の再確認」。
   同じ autoinstall での再現は未確認)。
   BIOS の GRUB メニュー項目から起動した live での設置は未実施。設置後に GDM から実際に
@@ -816,23 +870,15 @@ EFI 区画の byte 33,188,830 以降を書き漏らしたため、一致する�
 - Ubuntu の live 自身の apt は、`/cdrom` の Release(Server の署名)を、live 側の
   `cdrom.sources`(Desktop の鍵だけを信頼)で検証できず、「not signed」と表示する。
   確認した範囲では設置の成否に影響していない。
-- toram 項目からの設置は、最終 ISO では完走しない(Server で試行)。複写後に `eject -f cd0` で
-  媒体を取り外すと、autoinstall の apt が `/cdrom/dists/resolute/Release` と、GRUB・shim などの
-  deb(`/cdrom/pool/…`)を要求して失敗する。toram の複写対象が層だけで、`/dists` と `/pool` を
-  含まないため。証拠は `build/evidence/relayer-r6-server/toram/`
-  (`toram-diag7.txt`・`toram-diag15.txt` など)。
-  対策として、複写台本が `casper/bootkit-chains/<os>.extra` の一覧のファイルも RAM へ写す
-  変更を加えた(`ventoy/ramsel/30bootkit-ramsel`、一覧は `tools/ubuntu-merge/make-extra-list.py`
-  が設置先の manifest との差と依存の閉包から作る。Server は `dists` の索引 6 ファイルと deb 7 個、
-  合計約 4.9 MB。`pool` 全体の約 2.4 GB は RAM に入らない)。最終 ISO の複製に新しい追加 cpio
-  と `server.extra` を足した試験用 ISO で、Server Normal の toram 設置は完走した
-  (QEMU 1 台、4,096 MiB、媒体は複写完了後に取り外し。poweroff まで 977 秒、設置後の単独起動で
-  ログイン、`dpkg --audit` 空、`apt-get check` 終了 0、パッケージ 713〔Normal の通常設置と同数〕、
-  `grub-efi-amd64-signed`・`grub-efi-amd64-bin`・`grub-efi-amd64-unsigned` あり。複写量は
-  層の合計に 4,925,042 バイトを足した 1,523,476,082)。証拠は
-  `build/evidence/relayer-r6-extra/`。この結果は試験用 ISO のもので、最終 ISO・USB の ISO には
-  未反映。Server Minimal・Ubuntu・Lubuntu の toram 設置は未実施。媒体取り外し後の全層読出し・
-  Python・APT の確認は、設置プログラムが追加データを要求する経路の検証を含まない。
+- toram からの設置は、最終 ISO では 3 OS・各 Normal/Minimal とも完走する
+  (「toram からの設置」を参照)。BIOS 起動の toram と、Ubuntu の GRUB メニュー項目から
+  起動した live での toram 設置は未試験である。
+  直前世代までの最終 ISO では、toram の複写対象が層だけで `/dists` と `/pool` を
+  含まなかったため、toram からの設置は完走しなかった(Server で試行。証拠は
+  `build/evidence/relayer-r6-server/toram/` の `toram-diag7.txt`・`toram-diag15.txt` など)。
+  `casper/bootkit-chains/<os>.extra` の一覧も RAM へ写す変更と Lubuntu の読み取り専用化を
+  最終 ISO に反映して完走を確認した(試験用 ISO での先行確認の証拠は
+  `build/evidence/relayer-r6-extra/`)。
 - Lubuntu Normal の設置後ディスクを通常の GRUB 項目(`quiet splash`)で起動した
   3 回のうち 2 回で、約 4 分後に `KERNEL PANIC! Fatal exception in interrupt`
   が出た。3 回目は SDDM に到達し、別途 `quiet splash` を外して serial を足した

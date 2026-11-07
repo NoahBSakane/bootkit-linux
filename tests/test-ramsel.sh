@@ -96,10 +96,12 @@ LIST
 mkdir -p "$MEDIA/dists/resolute" "$MEDIA/pool/main/e/efibootmgr"
 printf 'Release' >"$MEDIA/dists/resolute/Release"
 printf 'deb' >"$MEDIA/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb"
+printf 'apt' >"$MEDIA/casper/test.base.apt.squashfs"
 cat >"$MEDIA/casper/bootkit-chains/test.extra" <<'LIST'
 # apt が元の媒体なしで引くファイル
 dists/resolute/Release
 pool/main/e/efibootmgr/efibootmgr_1_amd64.deb
+casper/test.base.apt.squashfs
 LIST
 
 env_for() {
@@ -143,6 +145,8 @@ contains "$WORK/run-good/env" 'unset TORAM'
 [ -f "$WORK/target-good/dists/resolute/Release" ] || fail 'extra (dists) が写っていない'
 cmp -s "$MEDIA/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb" \
     "$WORK/target-good/pool/main/e/efibootmgr/efibootmgr_1_amd64.deb" || fail 'extra (pool) の写し誤り'
+cmp -s "$MEDIA/casper/test.base.apt.squashfs" "$WORK/target-good/casper/test.base.apt.squashfs" ||
+    fail 'extra (casper の層) が写っていない'
 ok '成功 (選択複写と env と extra)'
 
 # toram が無い: 何もしない。
@@ -184,7 +188,7 @@ printf 'pool/main/nope.deb\n' >"$MEDIA/casper/bootkit-chains/xmiss.extra"
 env_for 'BOOT_IMAGE=x toram bootkit.os=xmiss --- quiet' 'MemAvailable:    8000000 kB'
 [ "$(run_script xmiss)" = 1 ] || fail 'extra の欠落で止まらない'
 grep -Fq 'extra file missing' "$WORK/run-xmiss/failed" || fail 'extra 欠落の理由が違う'
-for bad in '../etc/passwd' '/etc/passwd' 'pool/../x' 'casper/x' 'pool//x' 'pool/a b'; do
+for bad in '../etc/passwd' '/etc/passwd' 'pool/../x' 'casper/x' 'casper/a/b.squashfs' 'casper/../x.squashfs' 'pool//x' 'pool/a b'; do
     printf 'test.base.squashfs\n' >"$MEDIA/casper/bootkit-chains/xbad.list"
     printf '%s\n' "$bad" >"$MEDIA/casper/bootkit-chains/xbad.extra"
     env_for 'BOOT_IMAGE=x toram bootkit.os=xbad --- quiet' 'MemAvailable:    8000000 kB'

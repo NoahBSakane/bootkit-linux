@@ -8,8 +8,9 @@
 #   1. 媒体(ISO)を探して読み取り専用で臨時マウントする。
 #   2. casper/bootkit-chains/<os>.list の層だけを /bootkit-ram (tmpfs) へ写す。
 #      casper/bootkit-chains/<os>.extra があれば、その各行(媒体内の dists/ か
-#      pool/ 以下の相対パス)も同じ相対パスで写す。設置プログラムが元の媒体を
-#      取り外した後も /cdrom の apt(file:/cdrom)で引けるようにするため。
+#      pool/ 以下の相対パス、または casper/ 直下の層)も同じ相対パスで写す。
+#      設置プログラムが元の媒体を取り外した後も、設置元の層や /cdrom の apt
+#      (file:/cdrom)を引けるようにするため。
 #   3. /run/bootkit-ramsel/env に LIVEMEDIA=/bootkit-ram と TORAM の解除を書く。
 #      ORDER がこれを mountroot のシェルへ読み戻すため、casper 本体は
 #      その tmpfs を livefs_root として使い、copy_live_to の二重複写は起きない。
@@ -96,9 +97,13 @@ valid_layer_name() {
 }
 
 valid_extra_path() {
-    # dists/ か pool/ 以下の相対パスだけ。.. ・先頭の / ・// ・空白は不可。
+    # dists/ か pool/ 以下の相対パス、または casper/ 直下の層(<層名>.squashfs)だけ。
+    # .. ・先頭の / ・// ・空白は不可。
     case "$1" in
     dists/* | pool/*) ;;
+    casper/*)
+        valid_layer_name "${1#casper/}" || return 1
+        ;;
     *) return 1 ;;
     esac
     case "$1" in

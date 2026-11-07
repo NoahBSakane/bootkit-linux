@@ -8,8 +8,8 @@
 
 一覧は、(1) dists の索引一式、(2) 設置時に入れる指定パッケージのうち、設置先
 (その OS の層の manifest.full)に無いものと、その依存の閉包の deb。
-標準ライブラリだけで動く。依存の選択は先頭の候補を使う簡易版で、取りこぼしは
-実機の設置で検出する。
+標準ライブラリだけで動く。依存は Depends・Pre-Depends・Recommends を辿り、選択は先頭の候補を使う簡易版で、
+取りこぼしは実機の設置で検出する。
 """
 import argparse
 import re
@@ -59,7 +59,8 @@ def closure(index, installed, seeds):
                 unresolved.append(name)
             continue
         need[name] = index[name]
-        deps = index[name].get('Depends', '') + ',' + index[name].get('Pre-Depends', '')
+        # apt は既定で Recommends も入れる(shim-signed の secureboot-db など)。
+        deps = ','.join(index[name].get(key, '') for key in ('Depends', 'Pre-Depends', 'Recommends'))
         for dep in re.split(r',\s*', deps):
             if not dep.strip():
                 continue
@@ -76,6 +77,7 @@ def main():
     parser.add_argument('--manifest', required=True, help='設置先の dpkg 一覧(manifest.full)')
     parser.add_argument('--seed', action='append', required=True, help='設置時に入れる指定パッケージ(複数可)')
     parser.add_argument('--dists-file', action='append', default=[], help='一覧に入れる dists 以下のパス(複数可)')
+    parser.add_argument('--literal', action='append', default=[], help='そのまま一覧に入れる行(casper/ の層など。複数可)')
     parser.add_argument('--root', help='指定すると、一覧の全ファイルがこの下に在ることを検査する')
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
@@ -86,7 +88,7 @@ def main():
     need, unresolved = closure(index, installed_names(args.manifest), args.seed)
     if unresolved:
         sys.exit('解決できない依存: ' + ' '.join(sorted(unresolved)))
-    lines = list(args.dists_file) + sorted(f['Filename'] for f in need.values())
+    lines = list(args.literal) + list(args.dists_file) + sorted(f['Filename'] for f in need.values())
     if args.root:
         missing = [line for line in lines if not (Path(args.root) / line).is_file()]
         if missing:

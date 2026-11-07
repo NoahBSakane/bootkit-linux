@@ -8,7 +8,8 @@ trap 'rm -rf "$WORK"' 0
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 ok() { printf 'ok: %s\n' "$*"; }
 
-mkdir -p "$WORK/media/dists/r" "$WORK/media/pool/main/a" "$WORK/media/pool/main/b"
+mkdir -p "$WORK/media/dists/r" "$WORK/media/pool/main/a" "$WORK/media/pool/main/b" "$WORK/media/pool/main/c"
+printf 'x' >"$WORK/media/pool/main/c/rec_1_amd64.deb"
 printf 'R' >"$WORK/media/dists/r/Release"
 printf 'x' >"$WORK/media/pool/main/a/top_1_amd64.deb"
 printf 'x' >"$WORK/media/pool/main/b/dep_1_amd64.deb"
@@ -16,6 +17,7 @@ cat >"$WORK/Packages" <<'P'
 Package: top
 Version: 1
 Depends: dep (>= 1), have-already | other
+Recommends: rec
 Filename: pool/main/a/top_1_amd64.deb
 Size: 10
 
@@ -23,6 +25,11 @@ Package: dep
 Version: 1
 Filename: pool/main/b/dep_1_amd64.deb
 Size: 20
+
+Package: rec
+Version: 1
+Filename: pool/main/c/rec_1_amd64.deb
+Size: 5
 
 Package: have-already
 Version: 1
@@ -35,9 +42,9 @@ printf 'have-already 1\n' >"$WORK/manifest"
 python3 -I "$TOOL" --index "$WORK/Packages" --manifest "$WORK/manifest" --seed top \
     --dists-file dists/r/Release --root "$WORK/media" --output "$WORK/out" >/dev/null ||
     fail '一覧の生成に失敗'
-printf '%s\n' dists/r/Release pool/main/a/top_1_amd64.deb pool/main/b/dep_1_amd64.deb >"$WORK/expected"
+printf '%s\n' dists/r/Release pool/main/a/top_1_amd64.deb pool/main/b/dep_1_amd64.deb pool/main/c/rec_1_amd64.deb >"$WORK/expected"
 cmp -s "$WORK/out" "$WORK/expected" || fail '一覧が期待と違う'
-ok '設置先に無いものと依存の閉包だけを載せる'
+ok '設置先に無いものと、依存(Recommends を含む)の閉包だけを載せる'
 
 # 媒体に無いファイルがあれば失敗する。
 rm "$WORK/media/pool/main/b/dep_1_amd64.deb"

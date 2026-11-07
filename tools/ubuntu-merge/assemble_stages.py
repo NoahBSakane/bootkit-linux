@@ -211,18 +211,30 @@ def finish(hashes):
         extract(osname, '/pool', ROOT / 'pool', 'pool-' + osname)
         writable(ROOT / 'pool')
     extract('server', '/dists', ROOT / 'dists', 'dists')
-    # toram の設置で、元の媒体を外した後も apt が引くファイルの一覧(Server)。
-    run(['python3', '-I', HERE / 'tools/ubuntu-merge/make-extra-list.py',
-         '--index', ROOT / 'dists/resolute/main/binary-amd64/Packages',
-         '--index', ROOT / 'dists/resolute/restricted/binary-amd64/Packages',
-         '--manifest', ROOT / 'casper/bootkit-meta/server/casper/ubuntu-server-minimal.manifest.full',
-         '--seed', 'efibootmgr', '--seed', 'grub-efi-amd64', '--seed', 'grub-efi-amd64-signed',
-         '--seed', 'shim-signed',
-         *(arg for name in ('Release', 'Release.gpg', 'main/binary-amd64/Packages',
-                            'main/binary-amd64/Packages.gz', 'restricted/binary-amd64/Packages',
-                            'restricted/binary-amd64/Packages.gz')
-           for arg in ('--dists-file', 'dists/resolute/' + name)),
-         '--root', ROOT, '--output', ROOT / 'casper/bootkit-chains/server.extra'], 'extra-list')
+    # toram の設置で、元の媒体を外した後も apt が引くファイルの一覧(OSごと)。
+    # 設置先の層(manifest.full)に無い GRUB・shim などとその依存、dists の索引、
+    # Ubuntu は設置用の apt 層(casper/ 直下)も入れる。
+    extra_sources = {
+        'server': ('server/casper/ubuntu-server-minimal.manifest.full', ()),
+        'ubuntu': ('desktop/casper/minimal.manifest.full',
+                   ('casper/common.dl.snap.ubuntu.std.apt.squashfs',
+                    'casper/common.dl.snap.ubuntu.apt.squashfs')),
+        'lubuntu': ('lubuntu/casper/minimal.manifest.full', ()),
+    }
+    for osname, (manifest, literals) in extra_sources.items():
+        run(['python3', '-I', HERE / 'tools/ubuntu-merge/make-extra-list.py',
+             '--index', ROOT / 'dists/resolute/main/binary-amd64/Packages',
+             '--index', ROOT / 'dists/resolute/restricted/binary-amd64/Packages',
+             '--manifest', ROOT / 'casper/bootkit-meta' / manifest,
+             '--seed', 'efibootmgr', '--seed', 'grub-efi-amd64', '--seed', 'grub-efi-amd64-signed',
+             '--seed', 'shim-signed',
+             *(arg for literal in literals for arg in ('--literal', literal)),
+             *(arg for name in ('Release', 'Release.gpg', 'main/binary-amd64/Packages',
+                                'main/binary-amd64/Packages.gz', 'restricted/binary-amd64/Packages',
+                                'restricted/binary-amd64/Packages.gz')
+               for arg in ('--dists-file', 'dists/resolute/' + name)),
+             '--root', ROOT, '--output', ROOT / 'casper/bootkit-chains' / (osname + '.extra')],
+            'extra-list-' + osname)
     # 同一パスのdebも公式のいずれかに由来することをmd5原本で検査。
     pool_md5 = {}
     for osname in ISO:
